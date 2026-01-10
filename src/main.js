@@ -8,27 +8,25 @@ import { logger } from './utils/DebugLogger.js';
 
 document.querySelector('#app').innerHTML = `
   <div class="container">
-    <div class="header">
+    <div class="visualizer" id="visualizer-container">
+        <div class="joystick" id="left-joy">
+            <div class="stick-point"></div>
+        </div>
+        <div class="joystick" id="right-joy">
+            <div class="stick-point"></div>
+        </div>
+    </div>
+
+    <div class="editor-container">
+        <textarea id="editor" readonly placeholder="Waiting for input..."></textarea>
+    </div>
+
+    <div class="bottom-bar">
         <div id="mode-indicator"><i class="fa-solid fa-circle-half-stroke"></i></div>
         <div id="case-indicator"><i class="fa-regular fa-circle"></i></div>
         <div class="header-actions">
             <div id="export-logs-btn" class="settings-trigger" title="Export Debug Logs"><i class="fa-solid fa-file-export"></i></div>
             <div id="settings-btn" class="settings-trigger"><i class="fa-solid fa-gear"></i></div>
-        </div>
-    </div>
-    
-    <div class="editor-container">
-        <textarea id="editor" readonly placeholder="Waiting for input..."></textarea>
-    </div>
-
-    <div class="visualizer" id="visualizer-container">
-        <div class="joystick" id="left-joy">
-            <div class="stick-point"></div>
-            <div class="label">Left Stick</div>
-        </div>
-        <div class="joystick" id="right-joy">
-            <div class="stick-point"></div>
-            <div class="label">Right Stick</div>
         </div>
     </div>
     
@@ -70,9 +68,34 @@ if (gearBtn) {
 settingsManager.onUpdate = (config) => {
   // Apply Settings
   const vContainer = document.getElementById('visualizer-container');
-  if (vContainer) vContainer.style.opacity = config.visualizer ? '1' : '0';
-
   const dStatus = document.getElementById('debug-status');
+  const editor = document.getElementById('editor');
+
+  if (vContainer) {
+    vContainer.style.opacity = config.visualizer ? '1' : '0';
+
+    // Apply Placement Class
+    vContainer.className = 'visualizer'; // Reset
+    const placement = config.visualizerPlacement || 'BOTTOM_CENTER';
+
+    if (placement === 'BOTTOM_CENTER') vContainer.classList.add('vis-bottom-center');
+    else if (placement === 'BOTTOM_OUTER') vContainer.classList.add('vis-bottom-outer');
+    else if (placement === 'TOP_CENTER') vContainer.classList.add('vis-top-center');
+    else if (placement === 'TOP_OUTER') vContainer.classList.add('vis-top-outer');
+
+    // Smart Scroll Padding
+    if (editor) {
+      editor.style.paddingTop = '2rem'; // Default
+      editor.style.paddingBottom = '2rem'; // Default
+
+      if (placement.startsWith('TOP')) {
+        editor.style.paddingTop = '320px'; // Give room at top
+      } else {
+        editor.style.paddingBottom = '320px'; // Give room at bottom
+      }
+    }
+  }
+
   if (dStatus) dStatus.style.display = config.debug ? 'block' : 'none';
 
   typingEngine.mapper.DEADZONE = config.deadzone;

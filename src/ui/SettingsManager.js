@@ -6,7 +6,8 @@ export class SettingsManager {
             visualizer: true,
             debug: false,
             deadzone: 0.5,
-            onsetConflict: 'COMMIT'
+            onsetConflict: 'COMMIT',
+            visualizerPlacement: 'BOTTOM_CENTER'
         };
 
         this.options = [
@@ -14,6 +15,7 @@ export class SettingsManager {
             { key: 'debug', label: 'Diagnostics', type: 'toggle' },
             { key: 'deadzone', label: 'Deadzone', type: 'range', min: 0.1, max: 0.9, step: 0.1 },
             { key: 'onsetConflict', label: 'Onset Conflict', type: 'select', values: ['COMMIT', 'IGNORE', 'SWITCH'] },
+            { key: 'visualizerPlacement', label: 'Vis. Placement', type: 'select', values: ['BOTTOM_CENTER', 'BOTTOM_OUTER', 'TOP_CENTER', 'TOP_OUTER'] },
             { key: 'calibrate', label: 'Recalibrate Controller', type: 'action' }
         ];
 
