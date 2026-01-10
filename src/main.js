@@ -70,12 +70,16 @@ const gamepadMenu = new GamepadMenu();
 gamepadMenu.onCalibrate = () => {
   const modal = document.getElementById('calibration-modal');
   if (modal) {
-    modal.style.display = 'flex';
-    CalibrationManager.start(gamepadManager.getActiveGamepad(), (mapping) => {
-      modal.style.display = 'none';
-      // Mapping is saved internally by CalibrationManager logic usually, or we can log it
-      console.log("Calibration complete", mapping);
-    });
+    // modal.style.display = 'flex'; // Manager handles this now? Let's check. Yes `start()` does.
+    // Actually `start()` sets display flex.
+
+    // We need to set mode to CALIBRATION for the bottom bar status text?
+    // User requested specific bottom bar text.
+    // Let's implement that via FocusManager or direct update?
+    // Best to set focusManager mode to 'CALIBRATION' and handle updateStatusText there.
+    focusManager.setMode('CALIBRATION');
+
+    calibrationManager.start();
   }
 };
 
@@ -199,6 +203,13 @@ function updateStatusText(mode) {
             </span>
           `;
     }
+  } else if (mode === 'CALIBRATION') {
+    html = `
+        <span class="notification-persistent">
+             <i class="fa-solid fa-asterisk" style="color: violet;"></i> 
+             <strong>Hold any button 5 seconds:</strong> Cancel calibration
+        </span>
+      `;
   }
 
   area.innerHTML = html;

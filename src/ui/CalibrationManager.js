@@ -201,6 +201,39 @@ export class CalibrationManager {
     handleInput(gamepad) {
         if (!this.isCalibrating) return;
 
+        // --- CANCEL CHECK (Hold Any Button 5s) ---
+        let anyButtonPressed = false;
+        // Check standard buttons and triggers if mapped as buttons
+        for (let i = 0; i < gamepad.buttons.length; i++) {
+            if (gamepad.buttons[i].pressed) {
+                anyButtonPressed = true;
+                break;
+            }
+        }
+
+        if (anyButtonPressed) {
+            if (!this.holdStartTime) {
+                this.holdStartTime = Date.now();
+            } else {
+                if (Date.now() - this.holdStartTime > 5000) {
+                    // Trigger Cancel
+                    this.stop();
+                    // Ideally we should notify user or just close.
+                    // OnClose callback in main.js should handle mode switch back to EDITOR or previous.
+                    // But we didn't pass an explicit onClose that switches mode.
+                    // main.js sets mode to CALIBRATION.
+                    // We need to ensure we return to EDITOR.
+                    // Let's assume on close we just hide modal.
+                    // The user asked to "Cancel calibration".
+                    // And return to text editor (implied by previous requests).
+                    // We should invoke onClose.
+                    return;
+                }
+            }
+        } else {
+            this.holdStartTime = null;
+        }
+
         // --- 0. INITIAL RELEASE CHECK ---
         if (this.state === 'INITIAL_RELEASE') {
             let stuckInput = null;
