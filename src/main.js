@@ -34,7 +34,7 @@ document.querySelector('#app').innerHTML = `
     </div>
 
     <div class="editor-container">
-        <textarea id="editor" readonly placeholder="Waiting for input..."></textarea>
+        <div id="editor-view" class="custom-editor" tabindex="0"></div>
     </div>
 
     <div class="bottom-bar" id="bottom-bar">
@@ -59,6 +59,10 @@ const settingsManager = new SettingsManager(); // Keep this for config
 const gamepadManager = new GamepadManager();
 const typingEngine = new TypingEngine();
 const visualizer = new Visualizer('visualizer-container');
+
+// Editor State
+let editorLastDpad = { up: false, down: false, left: false, right: false };
+let lastEngineTextLength = 0;
 
 const bookManager = new BookManager();
 const focusManager = new FocusManager();
@@ -94,6 +98,8 @@ focusManager.onChange = (mode) => {
       const part = bookManager.getCurrentPart();
       if (part) {
         typingEngine.reset(part.content);
+        lastEngineTextLength = part.content.length;
+        editorLastDpad = { up: false, down: false, left: false, right: false };
       }
     }
   }
@@ -270,7 +276,7 @@ settingsManager.onUpdate = (config) => {
   // Apply Settings
   const vContainer = document.getElementById('visualizer-container');
   const dStatus = document.getElementById('debug-status');
-  const editor = document.getElementById('editor');
+  const editor = document.getElementById('editor-view');
 
   if (vContainer) {
     vContainer.style.opacity = config.visualizer ? '1' : '0';
@@ -319,6 +325,12 @@ settingsManager.onUpdate = (config) => {
 
   typingEngine.mapper.DEADZONE = config.deadzone;
   typingEngine.onsetConflictMode = config.onsetConflict;
+
+  // Refresh Editor to reflect cursor changes immediately
+  if (focusManager.mode === 'EDITOR' || focusManager.mode === 'BOTTOM_BAR' || settingsManager.isOpen) {
+    const part = bookManager.getCurrentPart();
+    if (part) renderCustomEditor(part);
+  }
 };
 
 // Initial Render
@@ -403,15 +415,79 @@ gamepadManager.on('frame', (gamepad) => {
   // 5. Route Input based on Focus
   switch (focusManager.mode) {
     case 'EDITOR':
-      // Save valid text back to book manager periodically or on change
-      // Ideally TypingEngine emits change events, but for now we pull it or push it.
-      // Let's push on every frame or just when processed.
+      // D-Pad Cursor Movement (One press per frame or throttled? Let's use simple press check for now)
+      // Actually per-frame pressed check is too fast. Need simple one-shot or repeat.
+      // GamepadManager doesn't give "just pressed" for D-pad easily without tracking lastDpad relative to this specific loop?
+      // Actually frameInput.buttons.dpad has state.
+      // We need to track lastDpad for editor movement specifically or use a throttle.
+      // Let's use a simple frame-based throttle or "pressed & !lastPressed".
+
+      const dpad = frameInput.buttons.dpad;
+      const lastDpad = gamepadManager.lastDpad || { up: false, down: false, left: false, right: false }; // We need to track this somewhere? 
+      // gamepadManager stores lastDpad? No, settingsManager tracks its own.
+      // Let's track it locally in a static way or attach to focusManager?
+      // Simpler: Just check edge detection here.
+      // Limitation: No key repeat for now (User didn't explicitly ask, but good UX requires it. Sticking to single press for MVP).
+
+      const part = bookManager.getCurrentPart();
+      if (!part) break;
+
+      let cursor = part.cursor || 0;
+      const content = part.content || "";
+      let handledNav = false;
+
+      // Safe access helper
+      const justPressed = (btn) => dpad[btn] && !editorLastDpad[btn];
+
+      if (justPressed('left')) {
+        cursor = Math.max(0, cursor - 1);
+        handledNav = true;
+      }
+      if (justPressed('right')) {
+        cursor = Math.min(content.length, cursor + 1);
+        handledNav = true;
+      }
+
+      // Update persistent cursor
+      if (handledNav) {
+        bookManager.setPartCursor(cursor);
+      }
+
+      // Update tracking for next frame
+      editorLastDpad = { ...dpad };
+
+      // Typing Logic
       const state = typingEngine.processFrame(gamepad);
       if (state) {
-        updateEditorUI(state);
+        // Delta Text Logic
+        const currentEngineText = state.text;
+        const diff = currentEngineText.length - lastEngineTextLength;
+
+        if (diff !== 0) {
+          let newContent = content;
+          let newCursor = cursor;
+
+          if (diff > 0) {
+            // Insertion
+            const added = currentEngineText.slice(lastEngineTextLength);
+            newContent = content.slice(0, cursor) + added + content.slice(cursor);
+            newCursor += diff;
+          } else {
+            // Deletion (Backspace)
+            // Remove 'diff' characters BEFORE cursor
+            const charsToDelete = -diff;
+            const start = Math.max(0, cursor - charsToDelete);
+            newContent = content.slice(0, start) + content.slice(cursor);
+            newCursor = start;
+          }
+
+          bookManager.setCurrentPartContent(newContent);
+          bookManager.setPartCursor(newCursor);
+          lastEngineTextLength = currentEngineText.length;
+        }
+
+        renderCustomEditor(bookManager.getCurrentPart());
         visualizer.update(frameInput, state.mode, typingEngine.mappings, typingEngine.state.syllable);
-        // Save content
-        bookManager.setCurrentPartContent(state.text);
       }
       break;
 
@@ -426,7 +502,11 @@ gamepadManager.on('frame', (gamepad) => {
     case 'RENAMING':
       const rState = typingEngine.processFrame(gamepad);
       if (rState) {
-        updateEditorUI(rState);
+        // For renaming, we use simple append-only logic for now (cursor always at end)
+        renderCustomEditor({
+          content: rState.text,
+          cursor: rState.text.length
+        });
         visualizer.update(frameInput, rState.mode, typingEngine.mappings, typingEngine.state.syllable);
       }
 
@@ -476,49 +556,87 @@ gamepadManager.on('frame', (gamepad) => {
 });
 
 
-function updateEditorUI(state) {
-  const editor = document.getElementById('editor');
-  if (!editor) return;
+function renderCustomEditor(part) {
+  const container = document.getElementById('editor-view');
+  if (!container || !part) return;
 
-  // Show text + pending syllable preview
-  let displayText = state.text;
-  const s = typingEngine.state.syllable;
-  const mode = typingEngine.state.caseMode;
+  const content = part.content || "";
+  const cursor = part.cursor || 0;
 
-  const applyCase = (str, isStart) => {
-    if (!str) return str;
-    if (mode === 2) return str.toUpperCase();
-    if (mode === 1 && isStart) return str.toUpperCase();
-    return str; // Lower
+  // Pending Syllable Logic
+  const pending = typingEngine.getFormattedSyllable();
+  // We can assume TypingEngine.state.caseMode is current for styling pending chars if needed,
+  // but getFormattedSyllable applies upper/lower case already.
+
+  // Construct HTML
+  // Strategy: 
+  // 1. Text BEFORE cursor
+  // 2. Pending Text (AT cursor) -> wrapped in specialized span?
+  // 3. Cursor Effect (depends on type)
+  //    - BAR: insert <span class="cursor-bar"></span> between pending and post.
+  //    - BLOCK: The first char of POST is wrapped in <span class="cursor-block">C</span>. If post empty, space.
+  //    - UNDERLINE: Same as block logic but class cursor-underline.
+
+  const safeEscape = (str) => {
+    // Basic escape to prevent HTML injection
+    return str.replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/\n/g, '<br>')
+      .replace(/ /g, '&nbsp;'); // Use non-breaking space for visual alignment? 
+    // Actually textarea handles wrapping. 
+    // Using div with whitespace: pre-wrap is better in CSS.
   };
 
-  const onset = s.onset || '';
-  const vowel = s.vowel;
-  const coda = s.coda || '';
+  const pre = safeEscape(content.slice(0, cursor));
+  const postRaw = content.slice(cursor);
+  const postEscaped = safeEscape(postRaw); // Use for non-cursor parts
 
-  let pOnset = applyCase(onset, true);
-  let pVowel = applyCase(vowel || (state.mode.startsWith('RIME') ? '-' : ''), !onset);
-  let pCoda = applyCase(coda, !onset && !vowel);
+  const pendingHtml = pending ? `<span class="pending-text">${safeEscape(pending)}</span>` : '';
 
-  if (state.mode === 'ONSET') {
-    if (s.onset) {
-      displayText += `[${pOnset}-]`;
-    }
-  } else if (state.mode.startsWith('RIME')) {
-    displayText += `[${pOnset}${pVowel}${pCoda}]`;
-  } else if (state.mode === 'PUNCTUATION') {
-    if (s.onset) {
-      displayText += `[${s.onset}]`;
-    }
+  let cursorHtml = '';
+  const cursorType = settingsManager.config.cursorType || 'BAR';
+
+  if (cursorType === 'BAR') {
+    cursorHtml = `<span class="cursor cursor-bar"></span>`;
+    // Render: Pre + Pending + Cursor + Post
+    container.innerHTML = pre + pendingHtml + cursorHtml + postEscaped;
+  } else {
+    // BLOCK or UNDERLINE
+    // Needs to wrap the next character.
+    // NOTE: "Pending" text effectively pushes the cursor forward strictly speaking, 
+    // but "Staging area" usually means "Text being built AT the cursor".
+    // Visually: Pre | [Pending] | [Cursor/NextChar] | Rest.
+
+    let targetChar = postRaw.length > 0 ? postRaw[0] : ' '; // Space if EOF
+    let rest = postRaw.length > 0 ? postRaw.slice(1) : '';
+
+    // Escape
+    const targetHtml = safeEscape(targetChar);
+    const restHtml = safeEscape(rest);
+
+    const cursorClass = cursorType === 'BLOCK' ? 'cursor-block' : 'cursor-underline';
+    cursorHtml = `<span class="cursor ${cursorClass}">${targetHtml}</span>`;
+
+    container.innerHTML = pre + pendingHtml + cursorHtml + restHtml;
   }
 
-  if (editor.value !== displayText) {
-    editor.value = displayText;
-    editor.scrollTop = editor.scrollHeight;
+  // Scroll to cursor?
+  // Simple view follow: find .cursor element and scrollIntoView?
+  const cursorEl = container.querySelector('.cursor');
+  if (cursorEl) {
+    cursorEl.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }
+}
 
+// Keep old indicators update? Or move to standard update status?
+// indicators (case/mode) are outside editor-view usually.
+updateIndicators();
+
+function updateIndicators() {
   const mInd = document.getElementById('mode-indicator');
   const cInd = document.getElementById('case-indicator');
+  const state = typingEngine.state;
 
   if (mInd) {
     let icon = '';
@@ -539,7 +657,6 @@ function updateEditorUI(state) {
       case 1: icon = '<i class="fa-regular fa-circle-up"></i>'; break; // Shift
       case 2: icon = '<i class="fa-solid fa-circle-up"></i>'; break; // Caps
     }
-    cInd.innerHTML = icon;
   }
 }
 

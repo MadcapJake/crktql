@@ -2,7 +2,7 @@
 export class BookManager {
     constructor() {
         this.book = {
-            "0,0": { name: "Main", content: "" }
+            "0,0": { name: "Main", content: "", cursor: 0 }
         };
         this.currentPartKey = "0,0";
         this.filename = "untitled.htz";
@@ -19,7 +19,7 @@ export class BookManager {
                 const keys = Object.keys(this.book);
                 if (keys.length > 0) this.currentPartKey = keys[0];
                 else {
-                    this.book["0,0"] = { name: "Main", content: "" };
+                    this.book["0,0"] = { name: "Main", content: "", cursor: 0 };
                     this.currentPartKey = "0,0";
                 }
             }
@@ -51,13 +51,20 @@ export class BookManager {
         }
     }
 
+    setPartCursor(cursorIndex) {
+        if (this.book[this.currentPartKey]) {
+            this.book[this.currentPartKey].cursor = cursorIndex;
+        }
+    }
+
     createPart(x, y) {
         const key = `${x},${y}`;
         if (this.book[key]) return false; // Already exists
 
         this.book[key] = {
             name: "Unnamed",
-            content: ""
+            content: "",
+            cursor: 0
         };
         return true;
     }
@@ -73,7 +80,7 @@ export class BookManager {
             const keys = Object.keys(this.book);
             this.currentPartKey = keys.length > 0 ? keys[0] : "0,0";
             if (keys.length === 0) {
-                this.book["0,0"] = { name: "Main", content: "" };
+                this.book["0,0"] = { name: "Main", content: "", cursor: 0 };
             }
         }
         return true;
