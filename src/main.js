@@ -23,15 +23,7 @@ document.querySelector('#app').innerHTML = `
 
     <div id="grid-overview"></div>
     
-    <div id="rename-modal" class="modal-overlay" style="display: none;">
-        <div class="modal-content">
-            <h2>Rename Part</h2>
-            <div class="rename-input-container">
-                <input type="text" id="rename-input" readonly placeholder="Type name..." />
-            </div>
-            <div class="modal-footer">Press START to Confirm, B to Cancel</div>
-        </div>
-    </div>
+
     
     <div id="confirm-modal" class="modal-overlay" style="display: none; z-index: 200;">
         <div class="modal-content">
@@ -92,14 +84,17 @@ focusManager.onChange = (mode) => {
     gridOverview.activate();
     document.querySelector('.editor-container').style.display = 'none';
     document.getElementById('visualizer-container').style.display = 'none';
-  } else if (mode === 'EDITOR') {
+  } else if (mode === 'EDITOR' || mode === 'RENAMING') {
     gridOverview.deactivate();
     document.querySelector('.editor-container').style.display = 'flex';
     document.getElementById('visualizer-container').style.display = 'flex';
-    // Ensure editor reflects current part content
-    const part = bookManager.getCurrentPart();
-    if (part) {
-      typingEngine.reset(part.content);
+
+    // Ensure editor reflects current part content (Only for EDITOR, Renaming handles its own reset)
+    if (mode === 'EDITOR') {
+      const part = bookManager.getCurrentPart();
+      if (part) {
+        typingEngine.reset(part.content);
+      }
     }
   }
 
@@ -108,6 +103,39 @@ focusManager.onChange = (mode) => {
   } else {
     navBar.deactivate();
   }
+  updateStatusText(mode);
+};
+
+// Persistent Status Helper
+let currentNotificationTimeout = null;
+
+function updateStatusText(mode) {
+  const area = document.getElementById('notification-area');
+  if (!area) return;
+
+  if (currentNotificationTimeout) return; // Notification active
+
+  let html = '';
+  if (mode === 'OVERVIEW') {
+    html = `
+            <span class="notification-persistent">
+                <i class="fa-solid fa-x icon-blue"></i> Hold 3s: Delete Part&emsp;
+                <i class="fa-solid fa-y icon-yellow"></i> Rename Part&emsp;
+                <i class="fa-solid fa-a icon-green"></i> Open Part
+            </span>
+        `;
+  } else if (mode === 'RENAMING') {
+    const part = bookManager.getCurrentPart();
+    const oldName = part ? part.name : 'Unknown';
+    html = `
+            <span class="notification-persistent">
+                <i class="fa-solid fa-b icon-red"></i> Rename Part (Prior Name: ${oldName})&emsp;
+                <i class="fa-solid fa-square-caret-left icon-grey"></i> <strong>Select:</strong> Cancel Rename
+            </span>
+        `;
+  }
+
+  area.innerHTML = html;
 }
 
 // Notification Helper
@@ -115,14 +143,23 @@ function showNotification(msg) {
   const area = document.getElementById('notification-area');
   if (!area) return;
 
+  if (currentNotificationTimeout) {
+    clearTimeout(currentNotificationTimeout);
+    currentNotificationTimeout = null;
+  }
+
+  area.innerHTML = ''; // Clear persistent text
+
   const el = document.createElement('div');
   el.className = 'notification-toast';
   el.innerText = msg;
   area.appendChild(el);
 
-  // Auto remove defined by animation duration (3s)
-  setTimeout(() => {
+  // Auto remove and restore status
+  currentNotificationTimeout = setTimeout(() => {
     if (el.parentNode) el.parentNode.removeChild(el);
+    currentNotificationTimeout = null;
+    updateStatusText(focusManager.mode);
   }, 3000);
 }
 
@@ -294,19 +331,19 @@ window.addEventListener('request-editor-focus', () => {
 
 window.addEventListener('request-rename', (e) => {
   const { x, y, name } = e.detail;
-  // Open Dialog
-  const modal = document.getElementById('rename-modal');
-  const input = document.getElementById('rename-input');
-  if (modal && input) {
-    modal.style.display = 'flex';
-    input.value = name;
-    typingEngine.reset(name); // Reset engine with current name
-    focusManager.setMode('DIALOG');
+  // Previously opened modal. Now we switch to RENAMING mode inline.
+  // We need to know WHICH part we are renaming to block movement?
+  // GridOverview handles the "selected" logic. We just need to capture input.
 
-    // Store context on the modal or closure
-    modal.dataset.targetX = x;
-    modal.dataset.targetY = y;
-  }
+  // Actually, GridOverview dispatches this.
+  // We should switch TypingEngine to the name content.
+  typingEngine.reset(name ? name.trim() : '');
+
+  // Store target coordinates in focusManager or a temp var? 
+  // Let's attach it to focusManager for convenience
+  focusManager.renameTarget = { x, y, oldName: name };
+
+  focusManager.setMode('RENAMING');
 });
 
 // --- Main Loop ---
@@ -343,13 +380,12 @@ gamepadManager.on('frame', (gamepad) => {
     focusManager.toggleBottomBar();
   }
 
-  // Select -> Toggle Overview (Only if not in Dialog)
-  if (focusManager.mode !== 'DIALOG' && selectPressed && !gamepadManager.lastSelect) {
+  // Select -> Toggle Overview (Only if not in Dialog or Renaming)
+  if (focusManager.mode !== 'DIALOG' && focusManager.mode !== 'RENAMING' && selectPressed && !gamepadManager.lastSelect) {
     focusManager.toggleOverview();
   }
 
-  gamepadManager.lastStart = startPressed;
-  gamepadManager.lastSelect = selectPressed;
+
 
   // 5. Route Input based on Focus
   switch (focusManager.mode) {
@@ -374,37 +410,30 @@ gamepadManager.on('frame', (gamepad) => {
       navBar.handleInput(frameInput);
       break;
 
-    case 'DIALOG':
-      const dState = typingEngine.processFrame(gamepad);
-      const modal = document.getElementById('rename-modal');
-      const dInput = document.getElementById('rename-input');
-      const tx = modal.dataset.targetX;
-      const ty = modal.dataset.targetY;
-
-      if (dState) {
-        if (dInput.value !== dState.text) {
-          dInput.value = dState.text;
-        }
-        // Visualizer updates for dialog typing too?
-        visualizer.update(frameInput, dState.mode, typingEngine.mappings, typingEngine.state.syllable);
+    case 'RENAMING':
+      const rState = typingEngine.processFrame(gamepad);
+      if (rState) {
+        updateEditorUI(rState);
+        visualizer.update(frameInput, rState.mode, typingEngine.mappings, typingEngine.state.syllable);
       }
 
-      // START -> Confirm
-      if (startPressed && !gamepadManager.lastStart) { // Debounce might fail if global check didn't update lastStart?
-        // Global check updated lastStart? No, I moved it inside settings check? 
-        // Wait, I need to update lastStart at end of frame or handle uniformly.
-        // I'll update it at end.
-        bookManager.renamePart(tx, ty, dInput.value);
-        modal.style.display = 'none';
+      // B (EAST) -> Confirm Rename
+      if (frameInput.buttons.east && !gamepadManager.lastButtons?.east) {
+        const finalName = typingEngine.state.text;
+        const target = focusManager.renameTarget;
+        if (target) {
+          bookManager.renamePart(target.x, target.y, finalName);
+        }
         focusManager.setMode('OVERVIEW');
         gridOverview.render();
       }
 
-      // B (East) -> Cancel
-      if (frameInput.buttons.east) {
-        modal.style.display = 'none';
+      // SELECT -> Cancel Rename
+      if (frameInput.buttons.select && !gamepadManager.lastSelect) {
         focusManager.setMode('OVERVIEW');
       }
+
+      gamepadManager.lastButtons = { ...frameInput.buttons }; // Need to track for B button debounce
       break;
 
     case 'DIALOG_CONFIRM':
@@ -414,8 +443,6 @@ gamepadManager.on('frame', (gamepad) => {
         if (confirmCallback) confirmCallback();
         document.getElementById('confirm-modal').style.display = 'none';
         confirmCallback = null;
-        // Mode switch logic should be handled by callback or default to EDITOR?
-        // The callback for New Book sets mode to EDITOR.
       }
 
       // B (East) -> Cancel
@@ -427,7 +454,7 @@ gamepadManager.on('frame', (gamepad) => {
       break;
   }
 
-  // Update Last State
+  // Update Last State (Moved to end)
   gamepadManager.lastStart = startPressed;
   gamepadManager.lastSelect = selectPressed;
 

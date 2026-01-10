@@ -804,3 +804,22 @@ body {
   bottom: 0;
   left: 15px;
 }
+/* Icon Colors */
+.icon-blue, .icon-yellow, .icon-green, .icon-red, .icon-grey {
+    width: 24px;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    color: #fff;
+    font-size: 0.8rem;
+    margin-right: 4px;
+    text-shadow: none;
+}
+
+.icon-blue { background-color: #4facfe; }
+.icon-yellow { background-color: #f6d365; color: #333; }
+.icon-green { background-color: #43e97b; color: #333; }
+.icon-red { background-color: #ff5858; }
+.icon-grey { background-color: #a0a0a0; }
