@@ -5,6 +5,10 @@ import { Visualizer } from './ui/Visualizer.js';
 import { CalibrationManager } from './ui/CalibrationManager.js';
 import { SettingsManager } from './ui/SettingsManager.js';
 import { logger } from './utils/DebugLogger.js';
+import { BookManager } from './data/BookManager.js';
+import { FocusManager } from './ui/FocusManager.js';
+import { NavigationBar } from './ui/NavigationBar.js';
+import { GridOverview } from './ui/GridOverview.js';
 
 document.querySelector('#app').innerHTML = `
   <div class="container">
@@ -17,17 +21,41 @@ document.querySelector('#app').innerHTML = `
         </div>
     </div>
 
+    <div id="grid-overview"></div>
+    
+    <div id="rename-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <h2>Rename Part</h2>
+            <div class="rename-input-container">
+                <input type="text" id="rename-input" readonly placeholder="Type name..." />
+            </div>
+            <div class="modal-footer">Press START to Confirm, B to Cancel</div>
+        </div>
+    </div>
+    
+    <div id="confirm-modal" class="modal-overlay" style="display: none; z-index: 200;">
+        <div class="modal-content">
+            <h2 id="confirm-title">Confirm</h2>
+            <p id="confirm-message" style="margin-bottom: 2rem; color: #ccc; text-align: center;">Are you sure?</p>
+            <div class="modal-footer">Press START to Confirm, B to Cancel</div>
+        </div>
+    </div>
+
     <div class="editor-container">
         <textarea id="editor" readonly placeholder="Waiting for input..."></textarea>
     </div>
 
-    <div class="bottom-bar">
+    <div class="bottom-bar" id="bottom-bar">
         <div id="mode-indicator"><i class="fa-solid fa-circle-half-stroke"></i></div>
         <div id="case-indicator"><i class="fa-regular fa-circle"></i></div>
         <div class="header-actions">
             <div id="export-logs-btn" class="settings-trigger" title="Export Debug Logs"><i class="fa-solid fa-file-export"></i></div>
             <div id="settings-btn" class="settings-trigger"><i class="fa-solid fa-gear"></i></div>
+            <div id="new-book-btn" class="settings-trigger" title="New Book"><i class="fa-solid fa-book-medical"></i></div>
+            <div id="save-book-btn" class="settings-trigger" title="Save Book"><i class="fa-regular fa-floppy-disk"></i></div>
+            <div id="open-book-btn" class="settings-trigger" title="Open Book"><i class="fa-solid fa-book-open"></i></div>
         </div>
+        <div id="notification-area"></div>
     </div>
     
     <div id="debug-status"></div>
@@ -35,28 +63,155 @@ document.querySelector('#app').innerHTML = `
 `
 
 // Initialize Managers
+const settingsManager = new SettingsManager(); // Keep this for config
 const gamepadManager = new GamepadManager();
 const typingEngine = new TypingEngine();
 const visualizer = new Visualizer('visualizer-container');
-const settingsManager = new SettingsManager();
+
+const bookManager = new BookManager();
+const focusManager = new FocusManager();
+const navBar = new NavigationBar('bottom-bar');
+const gridOverview = new GridOverview('grid-overview', bookManager);
 
 // Initialize Calibration Manager
 const calibrationManager = new CalibrationManager(
   gamepadManager,
   typingEngine.mapper,
   () => {
-    // On Close, what do we do?
-    // Maybe ensure we are back in a safe state.
+    // Calibration close callback
+    focusManager.setMode('EDITOR');
   }
 );
 
-// Settings -> Calibration Integration
+// Focus Changes
+focusManager.onChange = (mode) => {
+  console.log("Mode changed to:", mode);
+
+  // Toggle UI visibility based on mode
+  if (mode === 'OVERVIEW') {
+    gridOverview.activate();
+    document.querySelector('.editor-container').style.display = 'none';
+    document.getElementById('visualizer-container').style.display = 'none';
+  } else if (mode === 'EDITOR') {
+    gridOverview.deactivate();
+    document.querySelector('.editor-container').style.display = 'flex';
+    document.getElementById('visualizer-container').style.display = 'flex';
+    // Ensure editor reflects current part content
+    const part = bookManager.getCurrentPart();
+    if (part) {
+      typingEngine.reset(part.content);
+    }
+  }
+
+  if (mode === 'BOTTOM_BAR') {
+    navBar.activate();
+  } else {
+    navBar.deactivate();
+  }
+}
+
+// Notification Helper
+function showNotification(msg) {
+  const area = document.getElementById('notification-area');
+  if (!area) return;
+
+  const el = document.createElement('div');
+  el.className = 'notification-toast';
+  el.innerText = msg;
+  area.appendChild(el);
+
+  // Auto remove defined by animation duration (3s)
+  setTimeout(() => {
+    if (el.parentNode) el.parentNode.removeChild(el);
+  }, 3000);
+}
+
+// Confirmation Helper
+let confirmCallback = null;
+function showConfirmModal(message, onConfirm) {
+  const modal = document.getElementById('confirm-modal');
+  const msgEl = document.getElementById('confirm-message');
+  if (modal && msgEl) {
+    msgEl.innerText = message;
+    modal.style.display = 'flex';
+    confirmCallback = onConfirm;
+    focusManager.setMode('DIALOG_CONFIRM'); // New mode to trap input
+  }
+}
+
+// Settings Integration
 settingsManager.onAction = (action) => {
   if (action === 'calibrate') {
-    settingsManager.toggle(); // Close settings
-    calibrationManager.start(); // Open calibration
+    settingsManager.toggle();
+    calibrationManager.start();
   }
 };
+
+// Button Handlers
+document.getElementById('new-book-btn')?.addEventListener('click', () => {
+  // New Book
+  showConfirmModal('Create new book? Unsaved changes will be lost.', () => {
+    bookManager.loadBook({}, "untitled.htz");
+    bookManager.createPart(0, 0); // Ensure default part
+    focusManager.setMode('EDITOR'); // Will change mode back from DIALOG_CONFIRM
+    gridOverview.render();
+    showNotification('New Book Created');
+  });
+});
+
+document.getElementById('open-book-btn')?.addEventListener('click', () => {
+  // Open Book File Dialog
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.htz,.json';
+  input.onchange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        bookManager.loadBook(e.target.result, file.name);
+        focusManager.setMode('EDITOR'); // Or Overview?
+
+        // If the book has parts, load the first one?
+        // BookManager handles default currentPart logic.
+        const part = bookManager.getCurrentPart();
+        if (part) {
+          typingEngine.reset(part.content);
+        } else {
+          // Should technically have one from loadBook's default logic
+          typingEngine.reset("");
+        }
+        gridOverview.render();
+
+      } catch (err) {
+        showNotification("Failed to load book: " + err.message);
+      }
+    };
+    reader.readAsText(file);
+  };
+  input.click();
+});
+
+document.getElementById('save-book-btn')?.addEventListener('click', () => {
+  // Save Book Logic
+  const content = bookManager.exportBook();
+  const filename = bookManager.filename || "my_book.htz";
+
+  // Create Blob and Link
+  const blob = new Blob([content], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  showNotification(`Book saved as ${filename}`);
+});
 
 const gearBtn = document.getElementById('settings-btn');
 if (gearBtn) {
@@ -85,13 +240,13 @@ settingsManager.onUpdate = (config) => {
 
     // Smart Scroll Padding
     if (editor) {
-      editor.style.paddingTop = '2rem'; // Default
-      editor.style.paddingBottom = '2rem'; // Default
+      editor.style.paddingTop = '2rem';
+      editor.style.paddingBottom = '2rem';
 
       if (placement.startsWith('TOP')) {
-        editor.style.paddingTop = '320px'; // Give room at top
+        editor.style.paddingTop = '320px';
       } else {
-        editor.style.paddingBottom = '320px'; // Give room at bottom
+        editor.style.paddingBottom = '320px';
       }
     }
   }
@@ -102,11 +257,11 @@ settingsManager.onUpdate = (config) => {
   typingEngine.onsetConflictMode = config.onsetConflict;
 };
 
-// Initialize Defaults
+// Initial Render
 settingsManager.render();
 settingsManager.onUpdate(settingsManager.config);
 
-// Gamepad Events
+// Handle Gamepad Connection
 window.addEventListener("gamepadconnected", (e) => {
   const gp = e.gamepad;
   gamepadManager.handleConnect(gp);
@@ -118,7 +273,28 @@ window.addEventListener("gamepaddisconnected", (e) => {
   console.log("Gamepad disconnected.");
 });
 
-// Main Loop
+window.addEventListener('request-editor-focus', () => {
+  focusManager.setMode('EDITOR');
+});
+
+window.addEventListener('request-rename', (e) => {
+  const { x, y, name } = e.detail;
+  // Open Dialog
+  const modal = document.getElementById('rename-modal');
+  const input = document.getElementById('rename-input');
+  if (modal && input) {
+    modal.style.display = 'flex';
+    input.value = name;
+    typingEngine.reset(name); // Reset engine with current name
+    focusManager.setMode('DIALOG');
+
+    // Store context on the modal or closure
+    modal.dataset.targetX = x;
+    modal.dataset.targetY = y;
+  }
+});
+
+// --- Main Loop ---
 gamepadManager.on('frame', (gamepad) => {
   // 1. Calibration takes priority
   if (calibrationManager.isCalibrating) {
@@ -129,32 +305,119 @@ gamepadManager.on('frame', (gamepad) => {
   // 2. Map Input
   const frameInput = typingEngine.mapper.map(gamepad);
 
-  // 3. Global Toggles (Start Button)
+  // 3. Global Toggles
   const startPressed = frameInput?.buttons.start;
-  // Simple edge detection for Start
-  if (startPressed && !gamepadManager.lastStart) {
-    settingsManager.toggle();
-  }
-  gamepadManager.lastStart = startPressed;
+  const selectPressed = frameInput?.buttons.select;
 
-  // 4. Settings Menu
+  // Start -> Toggle Bottom Bar
+  // If settings is open, we handle close logic inside settings handling block or here.
+  // User spec: "Clicking the start menu should close the settings popover"
   if (settingsManager.isOpen) {
-    settingsManager.handleInput(frameInput);
-    return; // Pause typing while in menu
+    if (startPressed && !gamepadManager.lastStart) {
+      settingsManager.toggle(); // Close settings
+    } else {
+      settingsManager.handleInput(frameInput);
+    }
+    gamepadManager.lastStart = startPressed;
+    gamepadManager.lastSelect = selectPressed;
+    return;
   }
 
-  // 5. Typing Engine
-  const state = typingEngine.processFrame(gamepad);
-  if (!state) return;
+  // Start -> Toggle Bottom Bar (Only if not in Dialog)
+  if (focusManager.mode !== 'DIALOG' && startPressed && !gamepadManager.lastStart) {
+    focusManager.toggleBottomBar();
+  }
 
-  // 6. Update UI
-  updateEditorUI(state);
+  // Select -> Toggle Overview (Only if not in Dialog)
+  if (focusManager.mode !== 'DIALOG' && selectPressed && !gamepadManager.lastSelect) {
+    focusManager.toggleOverview();
+  }
 
-  // 7. Visualizer
-  visualizer.update(frameInput, state.mode, typingEngine.mappings, typingEngine.state.syllable);
+  gamepadManager.lastStart = startPressed;
+  gamepadManager.lastSelect = selectPressed;
 
-  // 8. Debug Status
-  updateDebugUI(frameInput, gamepad, state);
+  // 5. Route Input based on Focus
+  switch (focusManager.mode) {
+    case 'EDITOR':
+      // Save valid text back to book manager periodically or on change
+      // Ideally TypingEngine emits change events, but for now we pull it or push it.
+      // Let's push on every frame or just when processed.
+      const state = typingEngine.processFrame(gamepad);
+      if (state) {
+        updateEditorUI(state);
+        visualizer.update(frameInput, state.mode, typingEngine.mappings, typingEngine.state.syllable);
+        // Save content
+        bookManager.setCurrentPartContent(state.text);
+      }
+      break;
+
+    case 'OVERVIEW':
+      gridOverview.handleInput(frameInput);
+      break;
+
+    case 'BOTTOM_BAR':
+      navBar.handleInput(frameInput);
+      break;
+
+    case 'DIALOG':
+      const dState = typingEngine.processFrame(gamepad);
+      const modal = document.getElementById('rename-modal');
+      const dInput = document.getElementById('rename-input');
+      const tx = modal.dataset.targetX;
+      const ty = modal.dataset.targetY;
+
+      if (dState) {
+        if (dInput.value !== dState.text) {
+          dInput.value = dState.text;
+        }
+        // Visualizer updates for dialog typing too?
+        visualizer.update(frameInput, dState.mode, typingEngine.mappings, typingEngine.state.syllable);
+      }
+
+      // START -> Confirm
+      if (startPressed && !gamepadManager.lastStart) { // Debounce might fail if global check didn't update lastStart?
+        // Global check updated lastStart? No, I moved it inside settings check? 
+        // Wait, I need to update lastStart at end of frame or handle uniformly.
+        // I'll update it at end.
+        bookManager.renamePart(tx, ty, dInput.value);
+        modal.style.display = 'none';
+        focusManager.setMode('OVERVIEW');
+        gridOverview.render();
+      }
+
+      // B (East) -> Cancel
+      if (frameInput.buttons.east) {
+        modal.style.display = 'none';
+        focusManager.setMode('OVERVIEW');
+      }
+      break;
+
+    case 'DIALOG_CONFIRM':
+      // Simple confirmation dialog
+      // START -> Confirm
+      if (startPressed && !gamepadManager.lastStart) {
+        if (confirmCallback) confirmCallback();
+        document.getElementById('confirm-modal').style.display = 'none';
+        confirmCallback = null;
+        // Mode switch logic should be handled by callback or default to EDITOR?
+        // The callback for New Book sets mode to EDITOR.
+      }
+
+      // B (East) -> Cancel
+      if (frameInput.buttons.east) {
+        document.getElementById('confirm-modal').style.display = 'none';
+        confirmCallback = null;
+        focusManager.setMode(focusManager.previousMode || 'EDITOR');
+      }
+      break;
+  }
+
+  // Update Last State
+  gamepadManager.lastStart = startPressed;
+  gamepadManager.lastSelect = selectPressed;
+
+  // Debug UI always updates if visible
+  updateDebugUI(frameInput, gamepad, null);
 });
 
 

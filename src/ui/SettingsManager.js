@@ -16,22 +16,32 @@ export class SettingsManager {
             { key: 'deadzone', label: 'Deadzone', type: 'range', min: 0.1, max: 0.9, step: 0.1 },
             { key: 'onsetConflict', label: 'Onset Conflict', type: 'select', values: ['COMMIT', 'IGNORE', 'SWITCH'] },
             { key: 'visualizerPlacement', label: 'Vis. Placement', type: 'select', values: ['BOTTOM_CENTER', 'BOTTOM_OUTER', 'TOP_CENTER', 'TOP_OUTER'] },
-            { key: 'calibrate', label: 'Recalibrate Controller', type: 'action' }
+            { key: 'calibrate', label: 'Recalibrate Controller', type: 'action' },
+            { key: 'done', label: 'Done', type: 'action', className: 'done-btn' }
         ];
 
         this.onUpdate = null;
         this.onAction = null;
         this.lastDpad = { up: false, down: false, left: false, right: false };
+        this.openTime = 0;
     }
 
     toggle() {
         this.isOpen = !this.isOpen;
+        if (this.isOpen) {
+            this.openTime = Date.now();
+        }
         this.render();
         return this.isOpen;
     }
 
     handleInput(input) {
         if (!this.isOpen || !input) return;
+
+        // Input Cooldown to prevent accidental triggering on open
+        if (Date.now() - this.openTime < 500) {
+            return;
+        }
 
         const dpad = input.buttons.dpad;
         const pressed = (btn) => dpad[btn] && !this.lastDpad[btn];
@@ -56,6 +66,11 @@ export class SettingsManager {
     }
 
     toggleOption(option) {
+        if (option.key === 'done') {
+            this.toggle();
+            return;
+        }
+
         if (option.type === 'action') {
             if (this.onAction) this.onAction(option.key);
             return;
@@ -91,20 +106,24 @@ export class SettingsManager {
 
         this.options.forEach((opt, index) => {
             const item = document.createElement('div');
-            item.className = `settings-item ${index === this.selectedIndex ? 'selected' : ''}`;
+            item.className = `settings-item ${index === this.selectedIndex ? 'selected' : ''} ${opt.className || ''}`;
 
             let valueDisplay = '';
-            if (opt.type === 'action') {
-                valueDisplay = '➜';
+            if (opt.key === 'done') {
+                item.innerHTML = `<span style="width:100%; text-align:center;">Done</span>`;
             } else {
-                valueDisplay = this.config[opt.key];
-                if (typeof valueDisplay === 'boolean') valueDisplay = valueDisplay ? 'ON' : 'OFF';
-            }
+                if (opt.type === 'action') {
+                    valueDisplay = '➜';
+                } else {
+                    valueDisplay = this.config[opt.key];
+                    if (typeof valueDisplay === 'boolean') valueDisplay = valueDisplay ? 'ON' : 'OFF';
+                }
 
-            item.innerHTML = `
-                <span class="settings-label">${opt.label}</span>
-                <span class="settings-value">${valueDisplay}</span>
-            `;
+                item.innerHTML = `
+                    <span class="settings-label">${opt.label}</span>
+                    <span class="settings-value">${valueDisplay}</span>
+                `;
+            }
 
             // Mouse Interaction
             item.addEventListener('click', () => {

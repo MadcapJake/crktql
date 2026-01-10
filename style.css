@@ -58,6 +58,8 @@ body {
   gap: 0;
   position: relative;
   overflow: hidden;
+  background: #111;
+  /* Darker bg for grid */
 }
 
 .bottom-bar {
@@ -69,6 +71,71 @@ body {
   background: var(--color-surface);
   border-top: 1px solid rgba(255, 255, 255, 0.1);
   z-index: 50;
+  transition: background-color 0.2s;
+  margin-top: auto;
+  /* Push to bottom in flex column */
+  position: relative;
+  /* For absolute positioning of notifications */
+}
+
+/* Notifications */
+#notification-area {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 200;
+  width: auto;
+}
+
+.notification-toast {
+  background: transparent;
+  border: none;
+  color: #fff;
+  padding: 0;
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 500;
+  animation: fadeOut 3s forwards;
+  white-space: nowrap;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+@keyframes fadeOut {
+  0% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  10% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  80% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+  }
+}
+
+.bottom-bar.nav-active {
+  background: #2a2a35;
+  /* Lighter when active */
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5);
+}
+
+.nav-selected {
+  color: var(--color-accent);
+  opacity: 1;
+  transform: scale(1.2);
+  text-shadow: 0 0 10px var(--color-accent);
 }
 
 .header-actions {
@@ -122,6 +189,72 @@ body {
   resize: none;
   outline: none;
   line-height: 1.5;
+}
+
+/* Grid Overview */
+#grid-overview {
+  display: none;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  /* Minus bottom bar? handled by flex or overlap using container padding? */
+  /* Wait, container is flex. If we hide editor, grid takes space. */
+  background: radial-gradient(circle, #1a1a1a 1px, transparent 1px) 0 0 / 40px 40px;
+  background-color: #0f0f13;
+  z-index: 10;
+  overflow: hidden;
+  /* We implement our own offset */
+}
+
+.grid-part {
+  position: absolute;
+  width: 140px;
+  height: 180px;
+  background: #222;
+  border: 2px solid #333;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  transition: transform 0.2s, border-color 0.2s;
+}
+
+.grid-part.selected {
+  border-color: var(--color-accent);
+  transform: scale(1.05);
+  box-shadow: 0 0 20px rgba(255, 0, 85, 0.3);
+  z-index: 5;
+}
+
+.grid-part-thumb {
+  flex: 1;
+  width: 100%;
+  background: #111;
+  margin-bottom: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  color: #666;
+  font-size: 8px;
+  padding: 4px;
+  font-family: monospace;
+  white-space: pre-wrap;
+}
+
+.grid-part-name {
+  font-size: 0.9rem;
+  font-weight: bold;
+  color: #ccc;
+  text-align: center;
+}
+
+.grid-empty-slot {
+  /* Maybe just outline? */
+  border: 2px dashed #333;
+  background: transparent;
 }
 
 /* Visualizer Styles */
@@ -296,29 +429,40 @@ body {
   color: #444;
 }
 
-/* Settings Modal */
+/* Settings Popover */
 .modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(0, 0, 0, 0.8);
-  backdrop-filter: blur(5px);
+  position: absolute;
+  /* Changed from fixed to absolute/popover logic, but simpler to just position modal-content */
+  /* Actually, to make it a popover from button, we can just style .modal-content and remove overlay bg */
+  top: auto;
+  left: auto;
+  bottom: 80px;
+  /* Above bottom bar */
+  right: 20px;
+  width: auto;
+  height: auto;
+  background: transparent;
+  backdrop-filter: none;
   display: flex;
-  justify-content: center;
-  align-items: center;
+  justify-content: flex-end;
+  align-items: flex-end;
   z-index: 100;
+  pointer-events: none;
+  /* Let clicks pass outside? No, we want to block interaction maybe? */
+  /* User wants "Popover". We can keep the overlay div but make it transparent and hit-testable only on content? */
+  /* Or just position the content. */
 }
 
 .modal-content {
   background: var(--color-surface);
-  padding: 2rem;
+  padding: 1.5rem;
   border-radius: 12px;
-  width: 90%;
-  max-width: 500px;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+  width: 450px;
+  /* Increased to fix wrapping */
+  max-width: 90%;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
   border: 1px solid rgba(255, 255, 255, 0.1);
+  pointer-events: auto;
 }
 
 .modal-content h2 {
@@ -329,13 +473,51 @@ body {
   letter-spacing: 0.1em;
 }
 
+.rename-input-container {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+#rename-input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: white;
+  font-size: 1.5rem;
+  font-family: monospace;
+  text-align: center;
+  outline: none;
+}
+
 .settings-item {
   display: flex;
   justify-content: space-between;
   padding: 1rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  transition: all 0.2s;
+  cursor: pointer;
+  transition: background 0.2s;
 }
+
+.done-btn {
+  margin-top: 1rem;
+  justify-content: center;
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  font-weight: bold;
+  border-radius: 8px;
+  /* Optional, looks more like a button */
+}
+
+.done-btn.selected {
+  background: var(--color-accent) !important;
+  border-color: var(--color-accent) !important;
+}
+
+
 
 .settings-item.selected {
   background: var(--color-surface-hover);

@@ -351,4 +351,11 @@ export class TypingEngine {
         this.state.syllable = { onset: null, vowel: null, coda: null };
         this.state.onsetOwner = null;
     }
+
+    reset(text = '') {
+        this.state.text = text;
+        this.clearSyllable();
+        this.state.mode = 'ONSET';
+        this.state.caseMode = 0;
+    }
 }
