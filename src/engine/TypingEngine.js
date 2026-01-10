@@ -1,4 +1,5 @@
 import { InputMapper } from '../input/InputMapper.js';
+import { logger } from '../utils/DebugLogger.js';
 
 export class TypingEngine {
     constructor() {
@@ -21,10 +22,11 @@ export class TypingEngine {
             lastInput: null,
             pendingChar: null,
             pendingStick: null,
+            onsetOwner: null,
 
             // Debounce / Dwell State
-            leftStick: { sector: null, enterTime: 0 },
-            rightStick: { sector: null, enterTime: 0 },
+            leftStick: { sector: null, enterTime: 0, locked: false },
+            rightStick: { sector: null, enterTime: 0, locked: false },
 
             modeSwitchTime: 0
         };
@@ -118,6 +120,13 @@ export class TypingEngine {
             const lastStick = last.sticks[stickName];
             const stickState = this.state[`${stickName}Stick`];
 
+            // 0. Lock Handling
+            if (!curStick.active) {
+                if (stickState.locked) logger.log('STICK', `${stickName} Unlocked`);
+                stickState.locked = false; // Unlock on release
+            }
+            if (stickState.locked) return; // Ignore if locked
+
             // 1. Sector Stability Check
             if (curStick.active && curStick.sector) {
                 if (stickState.sector !== curStick.sector) {
@@ -138,12 +147,12 @@ export class TypingEngine {
                             if (this.state.mode === 'ONSET' && whichPart === 'onset') {
                                 const otherStickName = stickName === 'left' ? 'right' : 'left';
                                 const otherStickState = this.state[`${otherStickName}Stick`]; // Internal state
-                                const otherStickInput = this.state.lastInput?.sticks[otherStickName]; // Raw input
+                                const otherStickInput = current.sticks[otherStickName]; // Raw input from CURRENT frame
 
                                 // Is the OTHER stick currently active and holding a value?
                                 // We check `this.state.syllable.onset` because that's where the *current* onset is stored.
                                 // If it's null, there's no conflict to resolve yet.
-                                if (otherStickInput && otherStickInput.active && this.state.syllable.onset) {
+                                if (otherStickInput && otherStickInput.active && !otherStickState.locked && this.state.syllable.onset) {
                                     // We have a conflict. User is holding one stick (with onset) and pressing another.
 
                                     // Check if we are the "new" stick?
@@ -151,27 +160,33 @@ export class TypingEngine {
                                     if (stickState.enterTime > otherStickState.enterTime) {
                                         // We are the NEW interaction.
 
+                                        // BOUNCE PROTECTION: If we already own the onset, this is likely a bounce.
+                                        // Ignoring self-conflicts saves "nono" double-types.
+                                        if (this.state.onsetOwner === stickName) {
+                                            logger.log('CONFLICT_SELF', `Ignored bounce for ${stickName} (Owner)`);
+                                            return;
+                                        }
+
+                                        logger.log('CONFLICT', `New: ${stickName}, Old: ${otherStickName}. Mode: ${this.onsetConflictMode}`);
+
                                         if (this.onsetConflictMode === 'IGNORE') {
                                             return; // Ignore this new stick
                                         }
                                         else if (this.onsetConflictMode === 'COMMIT') {
                                             // Commit the EXISTING syllable (from other stick)
-                                            // Then allow this one to start fresh.
-
-                                            // Commit current onset + 'o'
+                                            logger.log('CONFLICT_COMMIT', `Committed ${this.state.syllable.onset}o`);
                                             this.typeCharacter(this.state.syllable.onset + 'o');
                                             this.clearSyllable();
                                             this.consumeShift();
 
-                                            // Reset other stick state to avoid double commits?
-                                            // This is tricky. If we clear the other stick's state, it might re-trigger.
-                                            // For now, let's just clear the syllable and let the new stick take over.
-                                            // The new stick will then set the onset.
-                                            otherStickState.sector = null; // Invalidate other stick's sector
-                                            otherStickState.enterTime = now; // Reset timer so it doesn't re-trigger immediately?
+                                            // LOCK the other stick so it doesn't re-trigger immediately
+                                            otherStickState.locked = true;
+                                            otherStickState.sector = null;
+                                            logger.log('LOCK', `${otherStickName} Locked`);
                                         }
                                         else if (this.onsetConflictMode === 'SWITCH') {
                                             // Clear the buffer (discard old onset)
+                                            logger.log('CONFLICT_SWITCH', `Switched to ${stickName}`);
                                             this.clearSyllable();
                                             // Allow this stick to take over.
                                         }
@@ -183,6 +198,11 @@ export class TypingEngine {
                             if (char) {
                                 // Update the specific part of the syllable buffer
                                 this.state.syllable[whichPart] = char;
+
+                                // Set Owner for Onset
+                                if (whichPart === 'onset') {
+                                    this.state.onsetOwner = stickName;
+                                }
                             }
                         }
                     }
@@ -192,14 +212,6 @@ export class TypingEngine {
                 stickState.sector = null;
                 stickState.enterTime = 0;
 
-                // Should we clear the vowel/coda if released?
-                // "Unlike in the Onset Mode, releasing the joystick does not cause the vowel to be selected."
-                // But does it clear it? 
-                // "Only releasing the Rime Mode trigger causes the vowel and coda that are currently being held to be finalized"
-                // "currently being held" implies if I let go, it's gone?
-                // "If the user moves the joystick... it will cause the dash to change... If the user has both joysticks active..."
-                // This implies the value reflects CURRENT stick state.
-                // So if stick is inactive, that part is null.
                 if (this.state.mode.startsWith('RIME')) {
                     this.state.syllable[whichPart] = null;
                 }
@@ -207,22 +219,9 @@ export class TypingEngine {
 
             // 2. Commit on Release (ONSET ONLY)
             if (lastStick.active && !curStick.active && this.state.mode === 'ONSET' && whichPart === 'onset') {
-                // If we release stick in Onset mode, we commit Onset + 'o'.
-                // UNLESS we are about to press the trigger?
-                // The user says: "releasing the joystick... causes the letter o to be added".
-                // "By triggering rime mode, the user can circumvent the standard o vowel."
 
-                // Issue: If user presses Trigger immediately after release, we might have already committed.
-                // But usually you press Trigger WHILE holding, or BEFORE releasing.
-                // If you release, then press trigger, it's two separate actions.
-
-                if (this.state.syllable.onset) {
-                    // Need to handle formatting for Onset + 'o'
-                    // getFormattedSyllable() returns just the onset part if vowel/coda empty.
-                    // We need to append 'o'.
-                    // BUT wait, if Shift is active, 'o' stays lower? Yes.
-                    // "Mo".
-
+                // Only commit if WE own the onset
+                if (this.state.syllable.onset && this.state.onsetOwner === stickName) {
                     let text = this.getFormattedSyllable();
                     this.typeCharacter(text + 'o');
                     this.clearSyllable();
@@ -350,5 +349,6 @@ export class TypingEngine {
 
     clearSyllable() {
         this.state.syllable = { onset: null, vowel: null, coda: null };
+        this.state.onsetOwner = null;
     }
 }

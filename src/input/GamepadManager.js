@@ -35,6 +35,14 @@ export class GamepadManager {
         }
     }
 
+    handleConnect(gamepad) {
+        this.onGamepadConnected({ gamepad });
+    }
+
+    handleDisconnect(gamepad) {
+        this.onGamepadDisconnected({ gamepad });
+    }
+
     onGamepadConnected(e) {
         console.log("Gamepad connected", e.gamepad);
         this.controllers[e.gamepad.index] = e.gamepad;

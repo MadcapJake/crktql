@@ -67,6 +67,13 @@ body {
   margin-bottom: 2rem;
 }
 
+.header-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
 /* Removed unused .indicators, .status-box */
 
 
@@ -334,7 +341,6 @@ body {
   z-index: 50;
   opacity: 0.5;
   transition: opacity 0.2s;
-  margin-left: auto;
   /* Push to the right in flex container */
   padding: 8px 12px;
 }

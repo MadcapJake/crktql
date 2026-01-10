@@ -4,13 +4,17 @@ import { TypingEngine } from './engine/TypingEngine.js';
 import { Visualizer } from './ui/Visualizer.js';
 import { CalibrationManager } from './ui/CalibrationManager.js';
 import { SettingsManager } from './ui/SettingsManager.js';
+import { logger } from './utils/DebugLogger.js';
 
 document.querySelector('#app').innerHTML = `
   <div class="container">
     <div class="header">
         <div id="mode-indicator"><i class="fa-solid fa-circle-half-stroke"></i></div>
         <div id="case-indicator"><i class="fa-regular fa-circle"></i></div>
-        <div id="settings-btn" class="settings-trigger"><i class="fa-solid fa-gear"></i></div>
+        <div class="header-actions">
+            <div id="export-logs-btn" class="settings-trigger" title="Export Debug Logs"><i class="fa-solid fa-file-export"></i></div>
+            <div id="settings-btn" class="settings-trigger"><i class="fa-solid fa-gear"></i></div>
+        </div>
     </div>
     
     <div class="editor-container">
@@ -56,7 +60,6 @@ settingsManager.onAction = (action) => {
   }
 };
 
-// Gear Icon
 const gearBtn = document.getElementById('settings-btn');
 if (gearBtn) {
   gearBtn.addEventListener('click', () => {
@@ -218,4 +221,52 @@ function updateDebugUI(frameInput, gamepad, state) {
               R-Stick: ${frameInput.sticks.right.active ? frameInput.sticks.right.sector : 'Center'} (${Math.round(frameInput.sticks.right.angle)}°)
           `;
   }
+}
+
+// --- Robust Export Logic ---
+const exportBtn = document.getElementById('export-logs-btn');
+if (exportBtn) {
+  exportBtn.addEventListener('click', () => {
+    const logs = logger.export();
+
+    // 1. Always log to console as backup
+    console.log("--- DEBUG LOG EXPORT ---");
+    console.log(logs);
+    console.log("------------------------");
+
+    // 2. Try Clipboard API
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(logs).then(() => {
+        alert('Debug logs copied to clipboard!');
+      }).catch(err => {
+        console.error('Clipboard API failed', err);
+        fallbackCopy(logs);
+      });
+    } else {
+      fallbackCopy(logs);
+    }
+  });
+}
+
+function fallbackCopy(text) {
+  const textArea = document.createElement("textarea");
+  textArea.value = text;
+  textArea.style.top = "0";
+  textArea.style.left = "0";
+  textArea.style.position = "fixed";
+
+  document.body.appendChild(textArea);
+  textArea.focus();
+  textArea.select();
+
+  try {
+    const successful = document.execCommand('copy');
+    if (successful) alert('Debug logs copied to clipboard (Fallback)!');
+    else alert('Failed to copy. Check Console.');
+  } catch (err) {
+    console.error('Fallback copy failed', err);
+    alert('Failed to copy. Check Console.');
+  }
+
+  document.body.removeChild(textArea);
 }
