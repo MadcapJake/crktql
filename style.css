@@ -404,8 +404,6 @@ body {
 /* Debug Status */
 #debug-status {
   position: fixed;
-  bottom: 10px;
-  right: 10px;
   font-family: monospace;
   background: rgba(0, 0, 0, 0.8);
   padding: 10px;
@@ -413,6 +411,17 @@ body {
   color: #888;
   font-size: 0.7rem;
   pointer-events: none;
+  z-index: 100;
+}
+
+.debug-bottom-right {
+  bottom: 90px;
+  right: 20px;
+}
+
+.debug-top-right {
+  top: 20px;
+  right: 20px;
 }
 
 .status-box {

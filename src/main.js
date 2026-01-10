@@ -251,7 +251,22 @@ settingsManager.onUpdate = (config) => {
     }
   }
 
-  if (dStatus) dStatus.style.display = config.debug ? 'block' : 'none';
+  if (dStatus) {
+    dStatus.style.display = config.debug ? 'block' : 'none';
+
+    // Dynamic Placement
+    dStatus.className = ''; // Reset
+    // Default to bottom right if Vis is OFF or Vis is TOP
+    let placement = 'debug-bottom-right';
+
+    if (config.visualizer) {
+      if (config.visualizerPlacement && config.visualizerPlacement.startsWith('BOTTOM')) {
+        placement = 'debug-top-right';
+      }
+    }
+
+    dStatus.classList.add(placement);
+  }
 
   typingEngine.mapper.DEADZONE = config.deadzone;
   typingEngine.onsetConflictMode = config.onsetConflict;
