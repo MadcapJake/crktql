@@ -297,8 +297,11 @@ settingsManager.onUpdate = (config) => {
     }
   }
 
+  const exportBtn = document.getElementById('export-logs-btn');
+
   if (dStatus) {
     dStatus.style.display = config.debug ? 'block' : 'none';
+    if (exportBtn) exportBtn.style.display = config.debug ? 'flex' : 'none';
 
     // Dynamic Placement
     dStatus.className = ''; // Reset
