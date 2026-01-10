@@ -1,0 +1,265 @@
+:root {
+  --font-family: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  --line-height: 1.5;
+  --font-weight: 400;
+
+  --color-bg: #0f0f13;
+  --color-text: #e0e0e0;
+  --color-primary: #646cff;
+  --color-secondary: #535bf2;
+  --color-accent: #ff0055;
+
+  --color-surface: #1e1e24;
+  --color-surface-hover: #2a2a32;
+
+  --shadow-lg: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+
+  color-scheme: light dark;
+  color: var(--color-text);
+  background-color: var(--color-bg);
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  margin: 0;
+  display: flex;
+  place-items: center;
+  min-width: 320px;
+  min-height: 100vh;
+  font-family: var(--font-family);
+}
+
+#app {
+  width: 100%;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+/* UI Styles */
+.container {
+  width: 100%;
+  max-width: 900px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 2rem;
+  gap: 1rem;
+}
+
+.header {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  margin-bottom: 2rem;
+}
+
+/* Removed unused .indicators, .status-box */
+
+
+
+#mode-indicator,
+#case-indicator {
+  padding: 8px 16px;
+  background-color: var(--surface-light);
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  letter-spacing: 0.05em;
+  color: var(--primary);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  min-width: 100px;
+  text-align: center;
+}
+
+#case-indicator {
+  color: var(--secondary);
+  /* Different color for distinction */
+}
+
+.editor-container {
+  flex: 1;
+  background: var(--color-surface);
+  border-radius: 8px;
+  padding: 2rem;
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+}
+
+#editor {
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  border: none;
+  color: var(--color-text);
+  font-size: 2rem;
+  font-family: 'Courier New', monospace;
+  resize: none;
+  outline: none;
+  line-height: 1.5;
+}
+
+/* Visualizer Styles */
+.visualizer {
+  display: flex;
+  justify-content: center;
+  gap: 4rem;
+  height: 300px;
+  padding: 2rem;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 16px;
+}
+
+.joystick {
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  background: radial-gradient(circle at center, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.01) 70%);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  position: relative;
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+}
+
+.stick-point {
+  width: 20px;
+  height: 20px;
+  background: var(--color-primary);
+  border-radius: 50%;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  margin-top: -10px;
+  margin-left: -10px;
+  z-index: 10;
+  transition: transform 0.05s linear;
+  box-shadow: 0 0 10px var(--color-primary);
+}
+
+.label {
+  position: absolute;
+  bottom: -30px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-weight: bold;
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 0.9rem;
+}
+
+.segment-container {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+.segment {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+}
+
+.segment-label {
+  position: absolute;
+  font-size: 1.2rem;
+  font-weight: bold;
+  color: rgba(255, 255, 255, 0.3);
+  transition: all 0.2s ease;
+}
+
+/* Positioning 8 sectors labels */
+.segment[data-sector="NORTH"] .segment-label {
+  top: 15px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.segment[data-sector="NORTH_EAST"] .segment-label {
+  top: 18%;
+  right: 18%;
+}
+
+.segment[data-sector="EAST"] .segment-label {
+  top: 50%;
+  right: 15px;
+  transform: translateY(-50%);
+}
+
+.segment[data-sector="SOUTH_EAST"] .segment-label {
+  bottom: 18%;
+  right: 18%;
+}
+
+.segment[data-sector="SOUTH"] .segment-label {
+  bottom: 15px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.segment[data-sector="SOUTH_WEST"] .segment-label {
+  bottom: 18%;
+  left: 18%;
+}
+
+.segment[data-sector="WEST"] .segment-label {
+  top: 50%;
+  left: 15px;
+  transform: translateY(-50%);
+}
+
+.segment[data-sector="NORTH_WEST"] .segment-label {
+  top: 18%;
+  left: 18%;
+}
+
+.segment.active .segment-label {
+  color: var(--color-accent);
+  text-shadow: 0 0 15px var(--color-accent);
+  font-size: 1.6rem;
+  z-index: 5;
+}
+
+/* Debug Status */
+#debug-status {
+  position: fixed;
+  bottom: 10px;
+  right: 10px;
+  font-family: monospace;
+  background: rgba(0, 0, 0, 0.8);
+  padding: 10px;
+  border-radius: 4px;
+  color: #888;
+  font-size: 0.7rem;
+  pointer-events: none;
+}
+
+.status-box {
+  text-align: right;
+}
+
+#connection-status {
+  font-weight: bold;
+  color: #666;
+}
+
+.subtitle {
+  font-size: 0.8rem;
+  color: #444;
+}
