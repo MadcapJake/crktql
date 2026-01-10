@@ -1,5 +1,7 @@
-import '../style.css'
+import '../style.css';
+import { GamepadMenu } from './ui/GamepadMenu.js';
 import { GamepadManager } from './input/GamepadManager.js';
+
 import { TypingEngine } from './engine/TypingEngine.js';
 import { Visualizer } from './ui/Visualizer.js';
 import { CalibrationManager } from './ui/CalibrationManager.js';
@@ -33,6 +35,10 @@ document.querySelector('#app').innerHTML = `
         </div>
     </div>
 
+    <div id="gamepad-modal" class="modal-overlay" style="display: none; z-index: 151;">
+        <div class="modal-content"></div>
+    </div>
+
     <div class="editor-container">
         <div id="editor-view" class="custom-editor" tabindex="0"></div>
     </div>
@@ -42,6 +48,7 @@ document.querySelector('#app').innerHTML = `
         <div id="case-indicator"><i class="fa-regular fa-circle"></i></div>
         <div class="header-actions">
             <div id="export-logs-btn" class="settings-trigger" title="Export Debug Logs"><i class="fa-solid fa-file-export"></i></div>
+            <div id="gamepad-btn" class="settings-trigger" title="Controller Info"><i class="fa-solid fa-gamepad"></i></div>
             <div id="settings-btn" class="settings-trigger"><i class="fa-solid fa-gear"></i></div>
             <div id="new-book-btn" class="settings-trigger" title="New Book"><i class="fa-solid fa-book-medical"></i></div>
             <div id="save-book-btn" class="settings-trigger" title="Save Book"><i class="fa-regular fa-floppy-disk"></i></div>
@@ -58,6 +65,50 @@ document.querySelector('#app').innerHTML = `
 const settingsManager = new SettingsManager(); // Keep this for config
 const gamepadManager = new GamepadManager();
 const typingEngine = new TypingEngine();
+const gamepadMenu = new GamepadMenu();
+
+gamepadMenu.onCalibrate = () => {
+  const modal = document.getElementById('calibration-modal');
+  if (modal) {
+    modal.style.display = 'flex';
+    CalibrationManager.start(gamepadManager.getActiveGamepad(), (mapping) => {
+      modal.style.display = 'none';
+      // Mapping is saved internally by CalibrationManager logic usually, or we can log it
+      console.log("Calibration complete", mapping);
+    });
+  }
+};
+
+// Handle Connection Events for UI
+window.addEventListener("gamepadconnected", (e) => {
+  const btn = document.getElementById('gamepad-btn');
+  if (btn) {
+    btn.classList.remove('shake', 'status-warning');
+    btn.classList.add('status-success');
+    setTimeout(() => btn.classList.remove('status-success'), 1000);
+  }
+  showNotification("Game controller connected!", 2000);
+  gamepadMenu.setGamepadInfo({ id: e.gamepad.id, index: e.gamepad.index });
+});
+
+window.addEventListener("gamepaddisconnected", (e) => {
+  const btn = document.getElementById('gamepad-btn');
+  if (btn) {
+    btn.classList.add('shake', 'status-warning');
+  }
+  showNotification("No game controller connected", 5000);
+  gamepadMenu.setGamepadInfo(null);
+});
+
+// Initial State Check
+setTimeout(() => {
+  const gps = navigator.getGamepads ? navigator.getGamepads() : [];
+  const btn = document.getElementById('gamepad-btn');
+  if (btn && (!gps[0] || !gps[0].connected)) {
+    btn.classList.add('shake', 'status-warning');
+    showNotification("No game controller connected", 5000);
+  }
+}, 1000);
 const visualizer = new Visualizer('visualizer-container');
 
 // Editor State
@@ -270,6 +321,11 @@ if (gearBtn) {
   gearBtn.addEventListener('click', () => {
     if (!settingsManager.isOpen) settingsManager.toggle();
   });
+
+  const gamepadBtn = document.getElementById('gamepad-btn');
+  gamepadBtn.addEventListener('click', () => {
+    if (!gamepadMenu.isOpen) gamepadMenu.toggle();
+  });
 }
 
 settingsManager.onUpdate = (config) => {
@@ -382,6 +438,20 @@ gamepadManager.on('frame', (gamepad) => {
   // 2. Map Input
   const frameInput = typingEngine.mapper.map(gamepad);
 
+  // 2a. Gamepad Menu (Priority)
+  if (gamepadMenu.isOpen) {
+    // Check for Start button here to manage focus callback
+    if (frameInput?.buttons.start && !gamepadManager.lastStart) {
+      gamepadMenu.close();
+      focusManager.setMode('EDITOR');
+      gamepadManager.lastStart = true; // Consumed
+      return;
+    }
+
+    gamepadMenu.handleInput(frameInput);
+    return;
+  }
+
   // 3. Global Toggles
   const startPressed = frameInput?.buttons.start;
   const selectPressed = frameInput?.buttons.select;
@@ -392,6 +462,7 @@ gamepadManager.on('frame', (gamepad) => {
   if (settingsManager.isOpen) {
     if (startPressed && !gamepadManager.lastStart) {
       settingsManager.toggle(); // Close settings
+      focusManager.setMode('EDITOR');
     } else {
       settingsManager.handleInput(frameInput);
     }

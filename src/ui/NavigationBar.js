@@ -8,6 +8,7 @@ export class NavigationBar {
         // Export | Settings | New | Save | Open
         this.items = [
             'export-logs-btn',
+            'gamepad-btn',
             'settings-btn',
             'new-book-btn',
             'save-book-btn',

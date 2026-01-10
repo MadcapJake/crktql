@@ -18,7 +18,6 @@ export class SettingsManager {
             { key: 'cursorType', label: 'Cursor Type', type: 'select', values: ['BAR', 'BLOCK', 'UNDERLINE'] },
             { key: 'deadzone', label: 'Deadzone', type: 'range', min: 0.1, max: 0.9, step: 0.1 },
             { key: 'onsetConflict', label: 'Onset Conflict', type: 'select', values: ['COMMIT', 'IGNORE', 'SWITCH'] },
-            { key: 'calibrate', label: 'Recalibrate Controller', type: 'action' },
             { key: 'done', label: 'Done', type: 'action', className: 'done-btn' }
         ];
 
