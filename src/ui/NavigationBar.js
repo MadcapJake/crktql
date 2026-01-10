@@ -23,6 +23,11 @@ export class NavigationBar {
 
     activate() {
         this.isActive = true;
+        // Default to "Open Book" (Index 4)
+        const openIdx = this.items.indexOf('open-book-btn');
+        if (openIdx !== -1) {
+            this.selectedIndex = openIdx;
+        }
         this.render();
     }
 

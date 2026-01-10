@@ -324,6 +324,7 @@ settingsManager.onUpdate = (config) => {
 // Initial Render
 settingsManager.render();
 settingsManager.onUpdate(settingsManager.config);
+updateStatusText(focusManager.mode); // Ensure initial status text is shown
 
 // Handle Gamepad Connection
 window.addEventListener("gamepadconnected", (e) => {
