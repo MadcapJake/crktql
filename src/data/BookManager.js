@@ -34,7 +34,15 @@ export class BookManager {
     }
 
     getCurrentPart() {
-        return this.book[this.currentPartKey];
+        const part = this.book[this.currentPartKey];
+        if (!part) return null;
+
+        const [x, y] = this.currentPartKey.split(',').map(Number);
+        return {
+            ...part,
+            x,
+            y
+        };
     }
 
     setCurrentPartContent(content) {

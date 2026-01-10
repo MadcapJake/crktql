@@ -133,6 +133,15 @@ function updateStatusText(mode) {
                 <i class="fa-solid fa-square-caret-left icon-grey"></i> <strong>Select:</strong> Cancel Rename
             </span>
         `;
+  } else if (mode === 'EDITOR') {
+    const part = bookManager.getCurrentPart();
+    if (part) {
+      html = `
+            <span class="notification-persistent" style="font-family: monospace;">
+               ${part.name} <span style="color: #888;">(${part.x}, ${part.y})</span>
+            </span>
+          `;
+    }
   }
 
   area.innerHTML = html;
