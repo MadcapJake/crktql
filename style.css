@@ -73,21 +73,21 @@ body {
 
 #mode-indicator,
 #case-indicator {
-  padding: 8px 16px;
+  padding: 8px 12px;
   background-color: var(--surface-light);
   border-radius: 8px;
-  font-weight: 600;
-  font-size: 0.9rem;
-  letter-spacing: 0.05em;
+  font-size: 1.5rem;
+  /* Icon size */
   color: var(--primary);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-  min-width: 100px;
-  text-align: center;
+  min-width: 50px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
 #case-indicator {
   color: var(--secondary);
-  /* Different color for distinction */
 }
 
 .editor-container {
@@ -262,4 +262,323 @@ body {
 .subtitle {
   font-size: 0.8rem;
   color: #444;
+}
+
+/* Settings Modal */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(5px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 100;
+}
+
+.modal-content {
+  background: var(--color-surface);
+  padding: 2rem;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 500px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.modal-content h2 {
+  margin-bottom: 1.5rem;
+  text-align: center;
+  color: var(--primary);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.settings-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  transition: all 0.2s;
+}
+
+.settings-item.selected {
+  background: var(--color-surface-hover);
+  border-left: 4px solid var(--color-accent);
+  padding-left: calc(1rem - 4px);
+}
+
+.settings-label {
+  font-weight: 500;
+}
+
+.settings-value {
+  color: var(--secondary);
+  font-weight: bold;
+}
+
+.modal-footer {
+  margin-top: 2rem;
+  text-align: center;
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* Gear Icon */
+.settings-trigger {
+  font-size: 1.5rem;
+  cursor: pointer;
+  z-index: 50;
+  opacity: 0.5;
+  transition: opacity 0.2s;
+  margin-left: auto;
+  /* Push to the right in flex container */
+  padding: 8px 12px;
+}
+
+.settings-trigger:hover {
+  opacity: 1;
+}
+
+/* Definition lists matching styles */
+.action-btn {
+  background: var(--color-accent);
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  font-weight: bold;
+  cursor: pointer;
+  margin-top: 1rem;
+}
+
+.action-btn:hover {
+  background: var(--color-accent-dim);
+}
+
+.secondary-btn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #ccc;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.danger-btn {
+  background: transparent;
+  border: 1px solid #ff4444;
+  color: #ff4444;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+/* Calibration Visuals */
+.calibration-content {
+  text-align: center;
+}
+
+.calibration-prompt {
+  font-size: 1.5rem;
+  font-weight: bold;
+  margin: 1.5rem 0;
+  color: var(--color-accent);
+  min-height: 2rem;
+}
+
+.calibration-actions {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+}
+
+/* Visualization (schematic) */
+.vis-body {
+  width: 200px;
+  height: 120px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 40px;
+  margin: 0 auto;
+  position: relative;
+}
+
+.vis-btn {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  background: #333;
+  border-radius: 50%;
+  font-size: 10px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: #aaa;
+}
+
+.vis-btn.active {
+  background: var(--color-accent);
+  color: white;
+  box-shadow: 0 0 10px var(--color-accent);
+}
+
+.vis-btn.skipped {
+  background: #ffcc00;
+  color: #000;
+}
+
+.vis-stick.skipped,
+.vis-dpad.skipped {
+  border-color: #ffcc00;
+  color: #ffcc00;
+}
+
+/* Positions (Approximate) */
+.vis-l-shoulder {
+  top: -10px;
+  left: 30px;
+  border-radius: 4px;
+  width: 40px;
+}
+
+.vis-r-shoulder {
+  top: -10px;
+  right: 30px;
+  border-radius: 4px;
+  width: 40px;
+}
+
+.vis-l-trigger {
+  top: -25px;
+  left: 30px;
+  height: 10px;
+  width: 40px;
+  border-radius: 2px;
+}
+
+.vis-r-trigger {
+  top: -25px;
+  right: 30px;
+  height: 10px;
+  width: 40px;
+  border-radius: 2px;
+}
+
+.vis-dpad {
+  position: absolute;
+  top: 40px;
+  left: 20px;
+  width: 40px;
+  height: 40px;
+  background: #333;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8px;
+}
+
+.vis-dpad.active {
+  background: var(--color-accent);
+  color: white;
+}
+
+.vis-stick {
+  position: absolute;
+  width: 30px;
+  height: 30px;
+  background: #222;
+  border-radius: 50%;
+  border: 1px solid #444;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8px;
+}
+
+.vis-l-stick {
+  bottom: 20px;
+  left: 60px;
+}
+
+.vis-r-stick {
+  bottom: 20px;
+  right: 60px;
+}
+
+.vis-stick.active {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.vis-select {
+  top: 40px;
+  left: 80px;
+  width: 14px;
+  height: 8px;
+  border-radius: 2px;
+  font-size: 0;
+}
+
+.vis-start {
+  top: 40px;
+  right: 80px;
+  width: 14px;
+  height: 8px;
+  border-radius: 2px;
+  font-size: 0;
+}
+
+.vis-select.active,
+.vis-start.active {
+  background: var(--color-accent);
+}
+
+.flash-error {
+  animation: flashRed 0.5s ease-in-out;
+}
+
+@keyframes flashRed {
+
+  0%,
+  100% {
+    background-color: #333;
+    box-shadow: none;
+  }
+
+  50% {
+    background-color: #ff4444;
+    box-shadow: 0 0 20px #ff4444;
+  }
+}
+
+.vis-face-btns {
+  position: absolute;
+  top: 30px;
+  right: 20px;
+  width: 50px;
+  height: 50px;
+}
+
+.vis-y {
+  top: 0;
+  left: 15px;
+}
+
+.vis-x {
+  top: 15px;
+  left: 0;
+}
+
+.vis-b {
+  top: 15px;
+  right: 0;
+}
+
+.vis-a {
+  bottom: 0;
+  left: 15px;
 }

@@ -1,4 +1,10 @@
 export class GamepadManager {
+    getActiveGamepad() {
+        const indices = Object.keys(this.controllers);
+        if (indices.length > 0) return this.controllers[indices[0]];
+        return null;
+    }
+
     constructor() {
         this.controllers = {};
         this.animationFrameId = null;

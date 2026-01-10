@@ -1,7 +1,10 @@
+import { ControllerMappings } from './ControllerMappings.js';
+
 export class InputMapper {
     constructor() {
-        this.DEADZONE = 0.5; // Increased to prevent snap-back inputs on release
+        this.DEADZONE = 0.5;
         this.TRIGGER_THRESHOLD = 0.1;
+        this.mappings = new ControllerMappings();
     }
 
     /**
@@ -11,143 +14,181 @@ export class InputMapper {
     map(gamepad) {
         if (!gamepad) return null;
 
-        const pressed = (btn) => btn && (btn.pressed || btn.value > 0.5);
-        const value = (btn) => btn ? btn.value : 0;
+        const indices = this.mappings.getIndices(gamepad) || this.getDefaultIndices(gamepad);
 
-        // Standard: Axes 0/1 (Left), 2/3 (Right)
-        // User Reported Non-Standard: Axes 0/1 (Left), 3/4 (Right)
+        // --- Helper for Button/Axis Reading ---
+        // Supports: 12 (Button Index), "a0" (Axis 0 > 0.5), "-a1" (Axis 1 < -0.5), "+a1" (Axis 1 > 0.5)
 
-        let lx = 0, ly = 1, rx = 2, ry = 3;
+        const readInput = (source) => {
+            if (source === undefined || source === null) return false;
 
-        if (gamepad.mapping !== 'standard' && gamepad.axes.length >= 5) {
-            // Heuristic for the reported controller
-            rx = 3;
-            ry = 4;
+            // 1. Digital Button (Number)
+            if (typeof source === 'number') {
+                const btn = gamepad.buttons[source];
+                return btn && (btn.pressed || btn.value > 0.5);
+            }
+
+            // 2. String Descriptors
+            if (typeof source === 'string') {
+                // Hat Switch: "h0.1" (Hat 0, Up) - skipping complex hat parsing for now, reliant on Axis fallback usually.
+                if (source.startsWith('h')) return false;
+
+                // Axis as Button
+                // Formats: "a0", "+a0", "-a0"
+                let axisIdx = 0;
+                let sign = 0; // 0 = absolute check, 1 = positive, -1 = negative
+
+                if (source.startsWith('+a')) {
+                    axisIdx = parseInt(source.slice(2));
+                    sign = 1;
+                } else if (source.startsWith('-a')) {
+                    axisIdx = parseInt(source.slice(2));
+                    sign = -1;
+                } else if (source.startsWith('a')) {
+                    axisIdx = parseInt(source.slice(1));
+                    sign = 0;
+                } else {
+                    return false;
+                }
+
+                const val = gamepad.axes[axisIdx];
+                if (sign === 1) return val > 0.5;
+                if (sign === -1) return val < -0.5;
+                return Math.abs(val) > 0.5;
+            }
+            return false;
+        };
+
+        // D-Pad Helper: Checks mapping first, falls back to standard axes 6/7
+        const readDpad = (dir) => {
+            // 1. Try Mapped Index
+            let mapping = indices.buttons.dpad?.[dir];
+            if (mapping !== undefined) {
+                return readInput(mapping);
+            }
+
+            // 2. Fallback (Standard Axes 6/7)
+            const axisH = gamepad.axes[6]; // Left/Right
+            const axisV = gamepad.axes[7]; // Up/Down
+            if (dir === 'left' && axisH < -0.5) return true;
+            if (dir === 'right' && axisH > 0.5) return true;
+            if (dir === 'up' && axisV < -0.5) return true;
+            if (dir === 'down' && axisV > 0.5) return true;
+            return false;
         }
 
-        const leftTriggerValue = value(gamepad.buttons[6]);
-        const rightTriggerValue = value(gamepad.buttons[7]);
+        const axisValue = (idx) => {
+            if (idx !== undefined && gamepad.axes[idx] !== undefined) return gamepad.axes[idx];
+            return 0;
+        };
 
-        // Fallback for axes-based triggers (Common on Linux/DirectInput)
-        // Usually Axis 2 and 5 (or 4/5) are triggers.
-        // We only override if buttons are 0 to avoid conflict.
-        let altLt = 0, altRt = 0;
-        if (gamepad.axes.length >= 6) {
-            // Try Axis 2 and 5 (often used for L2/R2)
-            if (leftTriggerValue === 0 && Math.abs(gamepad.axes[2]) > 0.1) altLt = (gamepad.axes[2] + 1) / 2; // Normalize -1..1 to 0..1? Or just 0..1?
-            // Often triggers are -1 to 1.
-            // Let's assume standard 0..1 for axes if they are triggers? 
-            // Actually, triggers as axes often rest at -1 and press to 1.
-            if (leftTriggerValue === 0 && gamepad.buttons[6] && !gamepad.buttons[6].pressed) {
-                // Check Axis 2
-                // If Axis 2 is -1, value is 0. If 1, value is 1.
-                // We'll read raw value.
+        const value = (idxOrString) => {
+            // If button index
+            if (typeof idxOrString === 'number') {
+                return gamepad.buttons[idxOrString]?.value || 0;
+            }
+            // If axis string? Triggers might be mapped as axes.
+            // If "a5", we return raw value?
+            // InputMapper logic for triggers is usually simple "a5" -> get axis 5.
+            // But if indices.buttons.lt is "a5", we want keys value.
+            return 0;
+        }
+
+
+        // Axes
+        const lxVal = axisValue(indices.axes.lx);
+        const lyVal = axisValue(indices.axes.ly);
+        const rxVal = axisValue(indices.axes.rx);
+        const ryVal = axisValue(indices.axes.ry);
+
+        // Triggers
+        let lt = 0, rt = 0;
+        if (indices.axes.lt !== undefined) {
+            let raw = axisValue(indices.axes.lt);
+            if (raw > -1) lt = (raw + 1) / 2;
+        } else if (indices.buttons.lt !== undefined) {
+            // If mapped to a button index or string?
+            const map = indices.buttons.lt;
+            if (typeof map === 'number') lt = gamepad.buttons[map]?.value || 0;
+            else if (typeof map === 'string' && map.startsWith('a')) {
+                // Mapped to axis
+                const idx = parseInt(map.replace(/[^0-9]/g, ''));
+                let raw = axisValue(idx);
+                if (raw > -1) lt = (raw + 1) / 2;
             }
         }
 
-        // Actually, let's keep it simple first. If the user saw 0.00 for LT/RT, maybe they ARE on axes.
-        // Let's map normalized trigger values.
-
-        let lt = leftTriggerValue;
-        let rt = rightTriggerValue;
-
-        // Linux 8BitDo often uses Axis 2 (LT) and Axis 5 (RT)
-        if (lt === 0 && gamepad.axes[2] !== undefined && gamepad.axes[2] > -0.9) {
-            // Check if it looks like a trigger (Rest at -1?)
-            if (gamepad.axes[2] > -1) lt = (gamepad.axes[2] + 1) / 2;
-        }
-        if (rt === 0 && gamepad.axes[5] !== undefined && gamepad.axes[5] > -0.9) {
-            if (gamepad.axes[5] > -1) rt = (gamepad.axes[5] + 1) / 2;
-        }
-
-        // Default indices
-        let l3Idx = 10;
-        let r3Idx = 11;
-
-        if (gamepad.mapping !== 'standard' && gamepad.axes.length >= 5) {
-            // Heuristic: User's 8BitDo/Linux controller
-            // L3=9, R3=10
-            l3Idx = 9;
-            r3Idx = 10;
+        if (indices.axes.rt !== undefined) {
+            let raw = axisValue(indices.axes.rt);
+            if (raw > -1) rt = (raw + 1) / 2;
+        } else if (indices.buttons.rt !== undefined) {
+            const map = indices.buttons.rt;
+            if (typeof map === 'number') rt = gamepad.buttons[map]?.value || 0;
+            else if (typeof map === 'string' && map.startsWith('a')) {
+                const idx = parseInt(map.replace(/[^0-9]/g, ''));
+                let raw = axisValue(idx);
+                if (raw > -1) rt = (raw + 1) / 2;
+            }
         }
 
         return {
             mode: {
-                raw: {
-                    lt: lt,
-                    rt: rt,
-                },
+                raw: { lt, rt },
                 leftTrigger: lt > this.TRIGGER_THRESHOLD,
                 rightTrigger: rt > this.TRIGGER_THRESHOLD,
                 bothTriggers: (lt > this.TRIGGER_THRESHOLD) && (rt > this.TRIGGER_THRESHOLD)
             },
             sticks: {
-                left: this.processStick(gamepad.axes[lx], gamepad.axes[ly]),
-                right: this.processStick(gamepad.axes[rx], gamepad.axes[ry])
+                left: this.processStick(lxVal, lyVal),
+                right: this.processStick(rxVal, ryVal)
             },
             buttons: {
-                south: pressed(gamepad.buttons[0]), // A / Cross
-                east: pressed(gamepad.buttons[1]),  // B / Circle
-                west: pressed(gamepad.buttons[2]),  // X / Square
-                north: pressed(gamepad.buttons[3]), // Y / Triangle
-                lb: pressed(gamepad.buttons[4]),
-                rb: pressed(gamepad.buttons[5]),
-                select: pressed(gamepad.buttons[8]),
-                start: pressed(gamepad.buttons[9]),
-                l3: pressed(gamepad.buttons[l3Idx]),
-                r3: pressed(gamepad.buttons[r3Idx]),
+                south: readInput(indices.buttons.south),
+                east: readInput(indices.buttons.east),
+                west: readInput(indices.buttons.west),
+                north: readInput(indices.buttons.north),
+                lb: readInput(indices.buttons.lb),
+                rb: readInput(indices.buttons.rb),
+                select: readInput(indices.buttons.select),
+                start: readInput(indices.buttons.start),
+                l3: readInput(indices.buttons.l3),
+                r3: readInput(indices.buttons.r3),
                 dpad: {
-                    up: pressed(gamepad.buttons[12]),
-                    down: pressed(gamepad.buttons[13]),
-                    left: pressed(gamepad.buttons[14]),
-                    right: pressed(gamepad.buttons[15]),
+                    up: readDpad('up'),
+                    down: readDpad('down'),
+                    left: readDpad('left'),
+                    right: readDpad('right'),
                 }
             }
         };
     }
 
+    getDefaultIndices(gamepad) {
+        let map = {
+            axes: { lx: 0, ly: 1, rx: 2, ry: 3, lt: undefined, rt: undefined },
+            buttons: { south: 0, east: 1, west: 2, north: 3, lb: 4, rb: 5, lt: 6, rt: 7, select: 8, start: 9, l3: 10, r3: 11, dpad: { up: 12, down: 13, left: 14, right: 15 } }
+        };
+        return map;
+    }
+
     processStick(x, y) {
-        // Apply deadzone
         const magnitude = Math.sqrt(x * x + y * y);
         if (magnitude < this.DEADZONE) {
             return { x: 0, y: 0, angle: 0, magnitude: 0, active: false, sector: null };
         }
-
-        // Calculate angle in degrees (0 = North, 90 = East, 180 = South, 270 = West)
-        // Math.atan2(y, x) returns radians where 0 is East, PI/2 is South, etc.
-        // We want 0 to be North (negative Y).
-
-        // Standard Atan2: 0=East, 90=South, 180=West, -90=North
-        // Let's normalize to 0-360 starting from North clockwise.
         let angleRad = Math.atan2(y, x);
-        let degrees = angleRad * (180 / Math.PI); // (-180 to 180)
-
-        // Rotate so North is 0
-        // Atan2: North is -90. 
-        // -90 + 90 = 0.
+        let degrees = angleRad * (180 / Math.PI);
         degrees += 90;
-
         if (degrees < 0) degrees += 360;
-
         return {
-            x,
-            y,
-            angle: degrees,
-            magnitude,
-            active: true,
+            x, y, angle: degrees, magnitude, active: true,
             sector: this.getSector(degrees)
         };
     }
 
     getSector(degrees) {
-        // 8 sectors, 45 degrees each.
-        // North is 0 (337.5 to 22.5)
-        // NE is 45 (22.5 to 67.5)
-        // E is 90 (67.5 to 112.5)
-        // etc.
         const sectorSize = 45;
         const offset = sectorSize / 2;
-
         if (degrees >= 360 - offset || degrees < 0 + offset) return 'NORTH';
         if (degrees >= 45 - offset && degrees < 45 + offset) return 'NORTH_EAST';
         if (degrees >= 90 - offset && degrees < 90 + offset) return 'EAST';
@@ -156,7 +197,6 @@ export class InputMapper {
         if (degrees >= 225 - offset && degrees < 225 + offset) return 'SOUTH_WEST';
         if (degrees >= 270 - offset && degrees < 270 + offset) return 'WEST';
         if (degrees >= 315 - offset && degrees < 315 + offset) return 'NORTH_WEST';
-
         return null;
     }
 }

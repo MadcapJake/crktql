@@ -2,12 +2,15 @@ import '../style.css'
 import { GamepadManager } from './input/GamepadManager.js';
 import { TypingEngine } from './engine/TypingEngine.js';
 import { Visualizer } from './ui/Visualizer.js';
+import { CalibrationManager } from './ui/CalibrationManager.js';
+import { SettingsManager } from './ui/SettingsManager.js';
 
 document.querySelector('#app').innerHTML = `
   <div class="container">
     <div class="header">
-        <div id="mode-indicator">ONSET</div>
-        <div id="case-indicator">LOWER</div>
+        <div id="mode-indicator"><i class="fa-solid fa-circle-half-stroke"></i></div>
+        <div id="case-indicator"><i class="fa-regular fa-circle"></i></div>
+        <div id="settings-btn" class="settings-trigger"><i class="fa-solid fa-gear"></i></div>
     </div>
     
     <div class="editor-container">
@@ -29,14 +32,59 @@ document.querySelector('#app').innerHTML = `
   </div>
 `
 
+// Initialize Managers
 const gamepadManager = new GamepadManager();
 const typingEngine = new TypingEngine();
 const visualizer = new Visualizer('visualizer-container');
+const settingsManager = new SettingsManager();
 
+// Initialize Calibration Manager
+const calibrationManager = new CalibrationManager(
+  gamepadManager,
+  typingEngine.mapper,
+  () => {
+    // On Close, what do we do?
+    // Maybe ensure we are back in a safe state.
+  }
+);
+
+// Settings -> Calibration Integration
+settingsManager.onAction = (action) => {
+  if (action === 'calibrate') {
+    settingsManager.toggle(); // Close settings
+    calibrationManager.start(); // Open calibration
+  }
+};
+
+// Gear Icon
+const gearBtn = document.getElementById('settings-btn');
+if (gearBtn) {
+  gearBtn.addEventListener('click', () => {
+    if (!settingsManager.isOpen) settingsManager.toggle();
+  });
+}
+
+settingsManager.onUpdate = (config) => {
+  // Apply Settings
+  const vContainer = document.getElementById('visualizer-container');
+  if (vContainer) vContainer.style.opacity = config.visualizer ? '1' : '0';
+
+  const dStatus = document.getElementById('debug-status');
+  if (dStatus) dStatus.style.display = config.debug ? 'block' : 'none';
+
+  typingEngine.mapper.DEADZONE = config.deadzone;
+  typingEngine.onsetConflictMode = config.onsetConflict;
+};
+
+// Initialize Defaults
+settingsManager.render();
+settingsManager.onUpdate(settingsManager.config);
+
+// Gamepad Events
 window.addEventListener("gamepadconnected", (e) => {
   const gp = e.gamepad;
   gamepadManager.handleConnect(gp);
-  console.log(`Gamepad connected at index ${gp.index}: ${gp.id}. ${gp.buttons.length} buttons, ${gp.axes.length} axes.`);
+  console.log(`Gamepad connected at index ${gp.index}: ${gp.id}.`);
 });
 
 window.addEventListener("gamepaddisconnected", (e) => {
@@ -44,27 +92,55 @@ window.addEventListener("gamepaddisconnected", (e) => {
   console.log("Gamepad disconnected.");
 });
 
+// Main Loop
 gamepadManager.on('frame', (gamepad) => {
+  // 1. Calibration takes priority
+  if (calibrationManager.isCalibrating) {
+    calibrationManager.handleInput(gamepad);
+    return;
+  }
+
+  // 2. Map Input
+  const frameInput = typingEngine.mapper.map(gamepad);
+
+  // 3. Global Toggles (Start Button)
+  const startPressed = frameInput?.buttons.start;
+  // Simple edge detection for Start
+  if (startPressed && !gamepadManager.lastStart) {
+    settingsManager.toggle();
+  }
+  gamepadManager.lastStart = startPressed;
+
+  // 4. Settings Menu
+  if (settingsManager.isOpen) {
+    settingsManager.handleInput(frameInput);
+    return; // Pause typing while in menu
+  }
+
+  // 5. Typing Engine
   const state = typingEngine.processFrame(gamepad);
   if (!state) return;
 
-  // Update UI
+  // 6. Update UI
+  updateEditorUI(state);
+
+  // 7. Visualizer
+  visualizer.update(frameInput, state.mode, typingEngine.mappings, typingEngine.state.syllable);
+
+  // 8. Debug Status
+  updateDebugUI(frameInput, gamepad, state);
+});
+
+
+function updateEditorUI(state) {
   const editor = document.getElementById('editor');
+  if (!editor) return;
 
   // Show text + pending syllable preview
   let displayText = state.text;
   const s = typingEngine.state.syllable;
-
-  // We reconstruct the display to include brackets and case manually?
-  // Or better, let's expose specific formatted parts from engine?
-  // "getFormattedDisplay()"?
-
-  // Let's just replicate the Title Case logic visually or use the engine helper if possible?
-  // Engine `getFormattedSyllable` returns "Min". We want "[Min]".
-  // But for partials? "[M-n]".
-  // The engine doesn't return dashes.
-
   const mode = typingEngine.state.caseMode;
+
   const applyCase = (str, isStart) => {
     if (!str) return str;
     if (mode === 2) return str.toUpperCase();
@@ -72,13 +148,12 @@ gamepadManager.on('frame', (gamepad) => {
     return str; // Lower
   };
 
-  // Determine "Start" for Title Case
   const onset = s.onset || '';
-  const vowel = s.vowel; // can be null
+  const vowel = s.vowel;
   const coda = s.coda || '';
 
   let pOnset = applyCase(onset, true);
-  let pVowel = applyCase(vowel || (state.mode.startsWith('RIME') ? '-' : ''), !onset); // Vowel is start if no onset
+  let pVowel = applyCase(vowel || (state.mode.startsWith('RIME') ? '-' : ''), !onset);
   let pCoda = applyCase(coda, !onset && !vowel);
 
   if (state.mode === 'ONSET') {
@@ -97,29 +172,50 @@ gamepadManager.on('frame', (gamepad) => {
     editor.value = displayText;
     editor.scrollTop = editor.scrollHeight;
   }
-  document.getElementById('mode-indicator').textContent = state.mode;
-  document.getElementById('case-indicator').textContent = ['LOWER', 'SHIFT', 'CAPS'][state.caseMode];
 
-  const input = typingEngine.mapper.map(gamepad);
+  const mInd = document.getElementById('mode-indicator');
+  const cInd = document.getElementById('case-indicator');
 
-  // Update Visualizer
-  visualizer.update(input, state.mode, typingEngine.mappings);
+  if (mInd) {
+    let icon = '';
+    switch (state.mode) {
+      case 'ONSET': icon = '<i class="fa-solid fa-circle-half-stroke"></i>'; break;
+      case 'RIME_LEFT': icon = '<i class="fa-solid fa-circle-chevron-left"></i>'; break;
+      case 'RIME_RIGHT': icon = '<i class="fa-solid fa-circle-chevron-right"></i>'; break;
+      case 'PUNCTUATION': icon = '<i class="fa-solid fa-circle-minus"></i>'; break;
+      default: icon = state.mode;
+    }
+    mInd.innerHTML = icon;
+  }
 
-  // Debug
-  if (input) {
+  if (cInd) {
+    let icon = '';
+    switch (state.caseMode) {
+      case 0: icon = '<i class="fa-regular fa-circle"></i>'; break; // Lower
+      case 1: icon = '<i class="fa-regular fa-circle-up"></i>'; break; // Shift
+      case 2: icon = '<i class="fa-solid fa-circle-up"></i>'; break; // Caps
+    }
+    cInd.innerHTML = icon;
+  }
+}
+
+function updateDebugUI(frameInput, gamepad, state) {
+  const dStatus = document.getElementById('debug-status');
+  if (!dStatus || dStatus.style.display === 'none') return;
+
+  if (frameInput) {
     const rawAxes = gamepad.axes.map((a, i) => `${i}:${a.toFixed(2)}`).join(' ');
-    // Show active buttons for debugging L3/R3
     const activeButtons = gamepad.buttons
       .map((b, i) => b.pressed ? i : null)
       .filter(i => i !== null)
       .join(', ');
 
-    document.getElementById('debug-status').innerHTML = `
-          Buttons: [${activeButtons}] <br>
-          Raw Axes: ${rawAxes} <br>
-          LT: ${input.mode.raw.lt.toFixed(2)} | RT: ${input.mode.raw.rt.toFixed(2)} <br>
-          L-Stick: ${input.sticks.left.active ? input.sticks.left.sector : 'Center'} (${Math.round(input.sticks.left.angle)}°)<br>
-          R-Stick: ${input.sticks.right.active ? input.sticks.right.sector : 'Center'} (${Math.round(input.sticks.right.angle)}°)
-      `;
+    dStatus.innerHTML = `
+              Buttons: [${activeButtons}] <br>
+              Raw Axes: ${rawAxes} <br>
+              LT: ${frameInput.mode.raw.lt.toFixed(2)} | RT: ${frameInput.mode.raw.rt.toFixed(2)} <br>
+              L-Stick: ${frameInput.sticks.left.active ? frameInput.sticks.left.sector : 'Center'} (${Math.round(frameInput.sticks.left.angle)}°)<br>
+              R-Stick: ${frameInput.sticks.right.active ? frameInput.sticks.right.sector : 'Center'} (${Math.round(frameInput.sticks.right.angle)}°)
+          `;
   }
-});
+}

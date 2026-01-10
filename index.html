@@ -5,12 +5,52 @@
   <meta charset="UTF-8" />
   <link rel="icon" type="image/svg+xml" href="/vite.svg" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <title>Game Controller Text Editor</title>
 </head>
 
 <body>
 
   <div id="app"></div>
+
+  <div id="settings-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-content">
+      <h2>Settings</h2>
+      <div id="settings-list"></div>
+      <div class="modal-footer">Press START to Close</div>
+    </div>
+  </div>
+
+  <div id="calibration-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-content calibration-content">
+      <h2>Calibrate Controller</h2>
+      <div id="calibration-visual" class="calibration-visual">
+        <!-- Simple CSS Controller Visual -->
+        <div class="vis-body">
+          <div class="vis-btn vis-l-shoulder">LB</div>
+          <div class="vis-btn vis-r-shoulder">RB</div>
+          <div class="vis-btn vis-l-trigger">LT</div>
+          <div class="vis-btn vis-r-trigger">RT</div>
+          <div class="vis-dpad">D-Pad</div>
+          <div class="vis-stick vis-l-stick">L3</div>
+          <div class="vis-stick vis-r-stick">R3</div>
+          <div class="vis-btn vis-select">Select</div>
+          <div class="vis-btn vis-start">Start</div>
+          <div class="vis-face-btns">
+            <div class="vis-btn vis-y">Y</div>
+            <div class="vis-btn vis-x">X</div>
+            <div class="vis-btn vis-b">B</div>
+            <div class="vis-btn vis-a">A</div>
+          </div>
+        </div>
+      </div>
+      <div id="calibration-prompt" class="calibration-prompt">Press A</div>
+      <div class="calibration-actions">
+        <button id="cal-skip" class="secondary-btn">Skip</button>
+        <button id="cal-cancel" class="danger-btn">Cancel</button>
+      </div>
+    </div>
+  </div>
   <script type="module" src="/src/main.js"></script>
 </body>
 

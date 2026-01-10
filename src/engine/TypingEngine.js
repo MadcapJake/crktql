@@ -19,6 +19,8 @@ export class TypingEngine {
 
             // Tracking
             lastInput: null,
+            pendingChar: null,
+            pendingStick: null,
 
             // Debounce / Dwell State
             leftStick: { sector: null, enterTime: 0 },
@@ -28,6 +30,7 @@ export class TypingEngine {
         };
 
         this.DWELL_THRESHOLD = 60;
+        this.onsetConflictMode = 'COMMIT'; // Default
 
         this.mappings = {
             ONSET: {
@@ -107,6 +110,8 @@ export class TypingEngine {
     handleStickInput(current, last) {
         if (!last) return;
 
+        const now = Date.now();
+
         // whichPart: 'onset', 'vowel', 'coda'
         const processStick = (stickName, whichPart, map) => {
             const curStick = current.sticks[stickName];
@@ -118,16 +123,62 @@ export class TypingEngine {
                 if (stickState.sector !== curStick.sector) {
                     // Entered new sector
                     stickState.sector = curStick.sector;
-                    stickState.enterTime = Date.now();
+                    stickState.enterTime = now;
                 } else {
                     // Holding same sector
-                    const holdDuration = Date.now() - stickState.enterTime;
+                    const holdDuration = now - stickState.enterTime;
 
                     // Only act if held > threshold
                     if (holdDuration > this.DWELL_THRESHOLD) {
                         // Filter: If we held this stick BEFORE the last mode switch, ignore it.
                         // This forces a "fresh" press for the new mode.
                         if (stickState.enterTime > this.state.modeSwitchTime) {
+
+                            // CONFLICT RESOLUTION (ONSET MODE ONLY)
+                            if (this.state.mode === 'ONSET' && whichPart === 'onset') {
+                                const otherStickName = stickName === 'left' ? 'right' : 'left';
+                                const otherStickState = this.state[`${otherStickName}Stick`]; // Internal state
+                                const otherStickInput = this.state.lastInput?.sticks[otherStickName]; // Raw input
+
+                                // Is the OTHER stick currently active and holding a value?
+                                // We check `this.state.syllable.onset` because that's where the *current* onset is stored.
+                                // If it's null, there's no conflict to resolve yet.
+                                if (otherStickInput && otherStickInput.active && this.state.syllable.onset) {
+                                    // We have a conflict. User is holding one stick (with onset) and pressing another.
+
+                                    // Check if we are the "new" stick?
+                                    // Compare enterTimes.
+                                    if (stickState.enterTime > otherStickState.enterTime) {
+                                        // We are the NEW interaction.
+
+                                        if (this.onsetConflictMode === 'IGNORE') {
+                                            return; // Ignore this new stick
+                                        }
+                                        else if (this.onsetConflictMode === 'COMMIT') {
+                                            // Commit the EXISTING syllable (from other stick)
+                                            // Then allow this one to start fresh.
+
+                                            // Commit current onset + 'o'
+                                            this.typeCharacter(this.state.syllable.onset + 'o');
+                                            this.clearSyllable();
+                                            this.consumeShift();
+
+                                            // Reset other stick state to avoid double commits?
+                                            // This is tricky. If we clear the other stick's state, it might re-trigger.
+                                            // For now, let's just clear the syllable and let the new stick take over.
+                                            // The new stick will then set the onset.
+                                            otherStickState.sector = null; // Invalidate other stick's sector
+                                            otherStickState.enterTime = now; // Reset timer so it doesn't re-trigger immediately?
+                                        }
+                                        else if (this.onsetConflictMode === 'SWITCH') {
+                                            // Clear the buffer (discard old onset)
+                                            this.clearSyllable();
+                                            // Allow this stick to take over.
+                                        }
+                                    }
+                                }
+                            }
+
                             const char = map[curStick.sector];
                             if (char) {
                                 // Update the specific part of the syllable buffer
