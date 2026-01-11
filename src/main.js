@@ -44,7 +44,7 @@ document.querySelector('#app').innerHTML = `
     </div>
 
     <div class="bottom-bar" id="bottom-bar">
-        <div id="mode-indicator"><i class="fa-solid fa-circle-half-stroke"></i></div>
+        <div id="mode-indicator"><i class="fa-solid fa-border-none"></i></div>
         <div id="case-indicator"><i class="fa-regular fa-circle"></i></div>
         <div class="header-actions">
             <div id="export-logs-btn" class="settings-trigger" title="Export Debug Logs"><i class="fa-solid fa-file-export"></i></div>
