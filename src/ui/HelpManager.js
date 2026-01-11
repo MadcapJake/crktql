@@ -74,18 +74,24 @@ export class HelpManager {
         this.debounceCounter = 0;
     }
 
-    toggle(initialInput) {
+    toggle(initialInput, returnModeOverride) {
         this.isOpen = !this.isOpen;
         this.render();
 
         if (this.isOpen) {
-            this.focusManager.setMode('HELP');
+            // this.focusManager.setMode('HELP'); // Removed to prevent history pollution
             this.debounceCounter = 15; // Ignore input for 15 frames
             if (initialInput && initialInput.buttons) {
                 this.lastButtons = { ...initialInput.buttons };
             }
         } else {
-            this.focusManager.setMode('BOTTOM_BAR'); // Return to where we opened it from
+            if (returnModeOverride) {
+                this.focusManager.setMode(returnModeOverride);
+            } else {
+                const ov = document.getElementById('grid-overview');
+                const isOverview = ov && (ov.style.display === 'block' || getComputedStyle(ov).display !== 'none');
+                this.focusManager.setMode(isOverview ? 'OVERVIEW' : 'EDITOR');
+            }
         }
     }
 
@@ -103,9 +109,15 @@ export class HelpManager {
         const dpad = input.buttons.dpad;
         const buttons = input.buttons;
 
-        // CLOSE: Start or A (South)
-        if ((buttons.start && !this.lastButtons.start) || (buttons.south && !this.lastButtons.south)) {
-            this.toggle();
+        // CLOSE: Start -> Exit to Content (Smart Return)
+        if (buttons.start && !this.lastButtons.start) {
+            this.toggle(null, null); // Default smart return
+            return;
+        }
+
+        // CLOSE: A (South) -> Return to Bottom Bar
+        if (buttons.south && !this.lastButtons.south) {
+            this.toggle(null, 'BOTTOM_BAR');
             return;
         }
 

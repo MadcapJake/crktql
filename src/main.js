@@ -646,7 +646,15 @@ gamepadManager.on('frame', (gamepad) => {
     return;
   }
 
-  // Start -> Toggle Bottom Bar (Only if not in Dialog or Book Menu)
+  // 2c. Help Menu (Priority)
+  if (helpManager.isOpen) {
+    helpManager.handleInput(frameInput);
+    gamepadManager.lastStart = startPressed;
+    gamepadManager.lastSelect = selectPressed;
+    return;
+  }
+
+  // 3. Global Toggles Bottom Bar (Only if not in Dialog or Book Menu)
   if (focusManager.mode !== 'DIALOG' && focusManager.mode !== 'BOOK_MENU' && startPressed && !gamepadManager.lastStart) {
     focusManager.toggleBottomBar();
   }
