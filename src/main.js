@@ -610,7 +610,11 @@ gamepadManager.on('frame', (gamepad) => {
     // Check for Start button here to manage focus callback
     if (frameInput?.buttons.start && !gamepadManager.lastStart) {
       gamepadMenu.close();
-      focusManager.setMode('EDITOR');
+
+      const ov = document.getElementById('grid-overview');
+      const isOverview = ov && (ov.style.display === 'block' || getComputedStyle(ov).display !== 'none');
+      focusManager.setMode(isOverview ? 'OVERVIEW' : 'EDITOR');
+
       gamepadManager.lastStart = true; // Consumed
       return;
     }
@@ -629,7 +633,11 @@ gamepadManager.on('frame', (gamepad) => {
   if (settingsManager.isOpen) {
     if (startPressed && !gamepadManager.lastStart) {
       settingsManager.toggle(); // Close settings
-      focusManager.setMode('EDITOR');
+
+      const ov = document.getElementById('grid-overview');
+      const isOverview = ov && (ov.style.display === 'block' || getComputedStyle(ov).display !== 'none');
+      focusManager.setMode(isOverview ? 'OVERVIEW' : 'EDITOR');
+
     } else {
       settingsManager.handleInput(frameInput);
     }
@@ -664,7 +672,10 @@ gamepadManager.on('frame', (gamepad) => {
     case 'BOOK_MENU':
       bookMenu.handleInput(frameInput);
       if (!bookMenu.isOpen) {
-        focusManager.setMode('EDITOR'); // Return to Text Buffer
+        // Return to Overview if it's visible, otherwise Editor
+        const ov = document.getElementById('grid-overview');
+        const isOverview = ov && (ov.style.display === 'block' || getComputedStyle(ov).display !== 'none');
+        focusManager.setMode(isOverview ? 'OVERVIEW' : 'EDITOR');
       }
       break;
 
