@@ -218,13 +218,18 @@ function updateStatusText(mode) {
 
   let html = '';
   if (mode === 'OVERVIEW') {
+    const isUpdate = !!focusManager.citationUpdateTarget;
+    const updateText = isUpdate
+      ? `Update (Current: ${gridOverview.cursor.x}, ${gridOverview.cursor.y})`
+      : `Cite`;
+
     html = `
             <span class="notification-persistent">
                 <i class="fa-solid fa-arrows-up-down-left-right icon-blue"></i> Pan&emsp;
                 <i class="fa-solid fa-y icon-yellow"></i><i class="fa-solid fa-plus"></i> <i class="fa-solid fa-arrows-up-down-left-right icon-blue"></i> Jump&emsp;
                 <i class="fa-solid fa-x icon-blue"></i> <strong>Hold 3s:</strong> Delete&emsp;
                 <i class="fa-solid fa-y icon-yellow"></i> Rename&emsp;
-                <i class="fa-solid fa-b icon-red"></i> Cite
+                <i class="fa-solid fa-b icon-red"></i> ${updateText}
             </span>
         `;
   } else if (mode === 'RENAMING') {
@@ -537,6 +542,7 @@ window.addEventListener('request-citation-insert', (e) => {
 
       showNotification(`Link updated to (${x},${y})`);
       focusManager.citationUpdateTarget = null;
+      gridOverview.setLinkTarget(null);
     } else {
       // New Insertion at cursor
       const cursor = part.cursor || 0;
@@ -605,6 +611,11 @@ gamepadManager.on('frame', (gamepad) => {
 
   // Select -> Toggle Overview (Only if not in Dialog or Renaming)
   if (focusManager.mode !== 'DIALOG' && focusManager.mode !== 'RENAMING' && selectPressed && !gamepadManager.lastSelect) {
+    if (focusManager.mode === 'OVERVIEW') {
+      // Cancelling Overview Action
+      focusManager.citationUpdateTarget = null;
+      gridOverview.setLinkTarget(null);
+    }
     focusManager.toggleOverview();
   }
 
@@ -637,6 +648,12 @@ gamepadManager.on('frame', (gamepad) => {
         const { x, y } = focusManager.renameTarget;
         bookManager.renamePart(x, y, newName);
         focusManager.setMode('OVERVIEW');
+
+        // Prevent fall-through! Sync the overview's last button state to current frame
+        // so it doesn't see "B" as a "new press" in the next frame if button is held, 
+        // or effectively "debounces" this action.
+        gridOverview.syncInputState(frameInput);
+
         gridOverview.updateView(true);
         showNotification(`Part renamed to "${newName}"`);
         break;
@@ -685,11 +702,14 @@ gamepadManager.on('frame', (gamepad) => {
         rState.lastLength = rState.content.length;
       }
 
-      // 5. Render
+      // 5. Render Editor
       renderCustomEditor({
         content: rState.content,
         cursor: rState.cursor
       });
+
+      // 6. Render Visualizer (Live typing feedback)
+      visualizer.update(frameInput, typingEngine.state.mode, typingEngine.mappings);
 
       break;
 
@@ -911,6 +931,12 @@ gamepadManager.on('frame', (gamepad) => {
 
           // Switch to Overview and Target
           focusManager.setMode('OVERVIEW');
+
+          // Sync input to prevent immediate "B" trigger in Overview
+          gridOverview.syncInputState(frameInput);
+
+          // Highlight the target in yellow
+          gridOverview.setLinkTarget({ x: tx, y: ty });
 
           // ANIMATION: Start from current part, then move to target
           const currentPart = bookManager.getCurrentPart();

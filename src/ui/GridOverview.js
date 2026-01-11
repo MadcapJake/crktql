@@ -41,7 +41,16 @@ export class GridOverview {
     }
 
     deactivate() {
-        if (this.container) this.container.style.display = 'none';
+        this.isActive = false;
+        this.container.style.display = 'none';
+    }
+
+    syncInputState(input) {
+        // Sync internal state to current input to prevent edge triggers on mode switch
+        if (input && input.buttons) {
+            this.lastButtons = { ...input.buttons };
+            this.lastDpad = { ...input.buttons.dpad };
+        }
     }
 
     handleInput(input) {
@@ -142,7 +151,8 @@ export class GridOverview {
         }
 
         // B (East) -> Insert/Update Citation
-        if (buttons.east && !this.lastButtons.east) {
+        // Prevent trigger if Mod (Y) is held to avoid conflict with Follow/Rename overlap inputs
+        if (buttons.east && !this.lastButtons.east && !buttons.north) {
             console.log("Overview: B Pressed. Dispatching event.");
             window.dispatchEvent(new CustomEvent('request-citation-insert', {
                 detail: { x: this.cursor.x, y: this.cursor.y }
@@ -182,6 +192,11 @@ export class GridOverview {
         this.cursor.x = x;
         this.cursor.y = y;
         this.updateView();
+    }
+
+    setLinkTarget(target) {
+        this.linkTarget = target; // {x, y} or null
+        this.updateView(true);
     }
 
     // Update Transform and Content
@@ -253,10 +268,15 @@ export class GridOverview {
                 // Cursor Selection (Grid Cursor)
                 if (gx === this.cursor.x && gy === this.cursor.y) el.classList.add('selected');
 
-                // Active Part (Where we came from / will return to)
+                // Active Part (The part we are currently editing/viewing)
                 const current = this.bookManager.getCurrentPart();
                 if (current && current.x === gx && current.y === gy) {
                     el.classList.add('active-part');
+                }
+
+                // Link Target (The destination we are currently linking TO or updating)
+                if (this.linkTarget && this.linkTarget.x === gx && this.linkTarget.y === gy) {
+                    el.classList.add('link-target');
                 }
 
                 el.style.left = `${px}px`;

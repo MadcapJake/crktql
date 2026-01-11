@@ -395,6 +395,12 @@ body {
   box-shadow: 0 0 15px rgba(0, 123, 255, 0.6);
 }
 
+.link-target {
+  border-color: #ffcc00 !important;
+  box-shadow: 0 0 15px rgba(255, 204, 0, 0.6);
+  z-index: 11;
+}
+
 .grid-part.selected.active-part {
   border-color: var(--color-accent);
   /* Selected overrides border */
