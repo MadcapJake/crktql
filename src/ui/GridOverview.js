@@ -129,12 +129,24 @@ export class GridOverview {
 
         // If Y released and NOT used for nav -> Rename
         if (!buttons.north && this.lastButtons.north && !this.modUsedForNav) {
-            const part = this.bookManager.getPart(this.cursor.x, this.cursor.y);
-            if (part) {
-                window.dispatchEvent(new CustomEvent('request-rename', {
-                    detail: { x: this.cursor.x, y: this.cursor.y, name: part.name }
-                }));
+            if (this.ignoreNextRename) {
+                this.ignoreNextRename = false; // Consumed
+            } else {
+                const part = this.bookManager.getPart(this.cursor.x, this.cursor.y);
+                if (part) {
+                    window.dispatchEvent(new CustomEvent('request-rename', {
+                        detail: { x: this.cursor.x, y: this.cursor.y, name: part.name }
+                    }));
+                }
             }
+        }
+
+        // B (East) -> Insert/Update Citation
+        if (buttons.east && !this.lastButtons.east) {
+            console.log("Overview: B Pressed. Dispatching event.");
+            window.dispatchEvent(new CustomEvent('request-citation-insert', {
+                detail: { x: this.cursor.x, y: this.cursor.y }
+            }));
         }
 
         this.lastButtons = { ...buttons, dpad: { ...dpad } };
@@ -162,6 +174,14 @@ export class GridOverview {
         if (direction === 'right') this.cursor.x += cols;
         if (direction === 'up') this.cursor.y += rows; // Y+ is UP
         if (direction === 'down') this.cursor.y -= rows;
+    }
+
+    setCursor(x, y) {
+        // Simple direct jump for MVP. Animation can be added to updateView if we use transition CSS.
+        // updateView uses CSS transition on #grid-world transform, so it will animate automatically!
+        this.cursor.x = x;
+        this.cursor.y = y;
+        this.updateView();
     }
 
     // Update Transform and Content

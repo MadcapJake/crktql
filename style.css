@@ -311,6 +311,23 @@ body {
   line-height: 1.5;
 }
 
+/* Editor Citations */
+.citation-pill {
+  display: inline-block;
+  background: #334;
+  color: #AAF;
+  border: 1px solid #557;
+  border-radius: 10px;
+  padding: 0 6px;
+  font-size: 0.8em;
+  vertical-align: middle;
+  margin: 0 2px;
+  user-select: none;
+  /* Make it feel uneditable */
+  pointer-events: none;
+  /* Let clicks pass through (though gamepad driven) */
+}
+
 /* Grid Overview - Infinite 3D World */
 #grid-overview {
   display: none;

@@ -199,7 +199,8 @@ function updateStatusText(mode) {
                 <i class="fa-solid fa-arrows-up-down-left-right icon-blue"></i> Pan&emsp;
                 <i class="fa-solid fa-y icon-yellow"></i><i class="fa-solid fa-plus"></i> <i class="fa-solid fa-arrows-up-down-left-right icon-blue"></i> Jump&emsp;
                 <i class="fa-solid fa-x icon-blue"></i> <strong>Hold 3s:</strong> Delete&emsp;
-                <i class="fa-solid fa-y icon-yellow"></i> Rename
+                <i class="fa-solid fa-y icon-yellow"></i> Rename&emsp;
+                <i class="fa-solid fa-b icon-red"></i> Cite
             </span>
         `;
   } else if (mode === 'RENAMING') {
@@ -484,6 +485,43 @@ window.addEventListener('request-rename', (e) => {
   });
 });
 
+window.addEventListener('request-citation-insert', (e) => {
+  console.log("Main: Received request-citation-insert", e.detail);
+  const { x, y } = e.detail;
+  const part = bookManager.getCurrentPart();
+
+  if (part) {
+    const tag = `{{cite:${x},${y}}}`;
+    let content = part.content || "";
+    let newCursor = part.cursor || 0;
+
+    // CHECK: Are we updating an existing citation?
+    if (focusManager.citationUpdateTarget) {
+      const { start, end } = focusManager.citationUpdateTarget;
+      // Replace the range
+      content = content.slice(0, start) + tag + content.slice(end);
+      // Cursor after the tag
+      newCursor = start + tag.length;
+
+      showNotification(`Link updated to (${x},${y})`);
+      focusManager.citationUpdateTarget = null;
+    } else {
+      // New Insertion at cursor
+      const cursor = part.cursor || 0;
+      content = content.slice(0, cursor) + tag + content.slice(cursor);
+      newCursor = cursor + tag.length;
+      showNotification(`Link to (${x},${y}) inserted`);
+    }
+
+    bookManager.setCurrentPartContent(content);
+    bookManager.setPartCursor(newCursor);
+
+    focusManager.setMode('EDITOR');
+  } else {
+    showNotification("No active part to link from.");
+  }
+});
+
 // --- Main Loop ---
 gamepadManager.on('frame', (gamepad) => {
   // 1. Calibration takes priority
@@ -756,6 +794,26 @@ gamepadManager.on('frame', (gamepad) => {
 
       // Update persistent cursor
       if (handledNav) {
+        // ATOMIC CITATION SKIPPING:
+        // If cursor landed inside a citation tag, snap it to the boundary based on direction.
+        const re = /\{\{cite:-?\d+,-?\d+\}\}/g;
+        let match;
+        while ((match = re.exec(content)) !== null) {
+          const start = match.index;
+          const end = match.index + match[0].length;
+
+          // If strictly inside (not at edges)
+          if (cursor > start && cursor < end) {
+            // Determine direction: Left/Up -> Go to Start. Right/Down -> Go to End.
+            if (justPressed('left') || justPressed('up')) {
+              cursor = start;
+            } else {
+              cursor = end;
+            }
+            break;
+          }
+        }
+
         bookManager.setPartCursor(cursor);
         renderCustomEditor(part);
       }
@@ -786,6 +844,63 @@ gamepadManager.on('frame', (gamepad) => {
         return; // Exit frame to prevent RB from typing TAB
       }
 
+      // CITATION FOLLOW: Hold Y + Press B (East)
+      if (modPressed && frameInput.buttons.east && !gamepadManager.lastButtons.east) {
+        // Find citation at cursor
+        // Regex: /\{\{cite:(-?\d+),(-?\d+)\}\}/g
+        const re = /\{\{cite:(-?\d+),(-?\d+)\}\}/g;
+        let match;
+        let found = null;
+
+        while ((match = re.exec(content)) !== null) {
+          // Check intersection (inclusive of braces)
+          if (cursor >= match.index && cursor <= match.index + match[0].length) {
+            found = match;
+            break;
+          }
+        }
+
+        if (found) {
+          const tx = parseInt(found[1]);
+          const ty = parseInt(found[2]);
+          const tagStart = found.index;
+          const tagEnd = found.index + found[0].length;
+
+          console.log("Following citation to:", tx, ty);
+
+          // Set update target for edits
+          focusManager.citationUpdateTarget = { start: tagStart, end: tagEnd };
+
+          // Switch to Overview and Target
+          focusManager.setMode('OVERVIEW');
+
+          // ANIMATION: Start from current part, then move to target
+          const currentPart = bookManager.getCurrentPart();
+          if (currentPart) {
+            gridOverview.setCursor(currentPart.x, currentPart.y);
+            gridOverview.updateView(true); // Establish start pos in DOM
+          }
+
+          // Delay the move to allow DOM to register start position for transition
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              gridOverview.setCursor(tx, ty);
+              gridOverview.ignoreNextRename = true; // Prevent Y-release from triggering Rename
+            });
+          });
+
+          showNotification(`Following Link to (${tx},${ty})`);
+
+          gamepadManager.lastButtons = { ...frameInput.buttons };
+          return;
+        } else {
+          // If Y+B but NOT on citation?
+          showNotification("No link found at cursor");
+          gamepadManager.lastButtons = { ...frameInput.buttons }; // Consume input
+          return; // Prevent fall-through to default B action
+        }
+      }
+
       // PASTE TRIGGER: Hold Y + L3/R3 Click
       // Condition: Onset Mode + No Action?
       // User said: "When in Onset Mode and no joystick is in Selected Consonant mode"
@@ -805,6 +920,61 @@ gamepadManager.on('frame', (gamepad) => {
       }
 
       gamepadManager.lastButtons = { ...frameInput.buttons }; // General tracking for EDITOR too
+
+      // ATOMIC CITATION DELETION
+      // 1. Backspace (LB)
+      if (frameInput.buttons.lb && !gamepadManager.lastButtons.lb && !isModifierHeld) {
+        // Check if cursor is after a citation }}
+        const before = content.slice(0, cursor);
+        if (before.endsWith('}}')) {
+          const openIdx = before.lastIndexOf('{{cite:');
+          if (openIdx !== -1) {
+            const tag = before.slice(openIdx);
+            // Verify it's a valid citation tag structure
+            if (/^\{\{cite:\d+,\d+\}\}$/.test(tag)) {
+              // Atomic Delete
+              const newContent = content.slice(0, openIdx) + content.slice(cursor);
+              bookManager.setCurrentPartContent(newContent);
+              bookManager.setPartCursor(openIdx);
+
+              part.content = newContent;
+              part.cursor = openIdx;
+              renderCustomEditor(part);
+              typingEngine.reset(newContent);
+              lastEngineTextLength = newContent.length;
+
+              gamepadManager.lastButtons = { ...frameInput.buttons };
+              break; // Skip rest of frame
+            }
+          }
+        }
+      }
+
+      // 2. Delete Forward (X)
+      if (frameInput.buttons.west && !gamepadManager.lastButtons.west) {
+        // Check if cursor is at start of {{cite:
+        if (content.slice(cursor).startsWith('{{cite:')) {
+          const after = content.slice(cursor);
+          const closeIdx = after.indexOf('}}');
+          if (closeIdx !== -1) {
+            const tag = after.slice(0, closeIdx + 2);
+            if (/^\{\{cite:\d+,\d+\}\}$/.test(tag)) {
+              // Atomic Delete
+              const newContent = content.slice(0, cursor) + content.slice(cursor + tag.length);
+              bookManager.setCurrentPartContent(newContent);
+              // Cursor stays same
+
+              part.content = newContent;
+              renderCustomEditor(part);
+              typingEngine.reset(newContent);
+              lastEngineTextLength = newContent.length;
+
+              gamepadManager.lastButtons = { ...frameInput.buttons };
+              break;
+            }
+          }
+        }
+      }
 
       // Typing Logic
       const state = typingEngine.processFrame(gamepad);
@@ -1136,13 +1306,14 @@ function renderCustomEditor(part, currentAnchor = selectionAnchor) {
 
   const safeEscape = (str) => {
     // Basic escape to prevent HTML injection
-    return str.replace(/&/g, '&amp;')
+    let escaped = str.replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/\n/g, '<br>')
-      .replace(/ /g, '&nbsp;'); // Use non-breaking space for visual alignment? 
-    // Actually textarea handles wrapping. 
-    // Using div with whitespace: pre-wrap is better in CSS.
+      .replace(/ /g, '&nbsp;');
+
+    // Render Citations: {{cite:x,y}} -> Pill
+    return escaped.replace(/\{\{cite:(-?\d+),(-?\d+)\}\}/g, '<span class="citation-pill">⌖ $1, $2</span>');
   };
 
   // Selection Logic
