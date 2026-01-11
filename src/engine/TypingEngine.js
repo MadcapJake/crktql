@@ -11,6 +11,9 @@ export class TypingEngine {
             // Case: 0=lower, 1=shift (next char), 2=caps (lock)
             caseMode: 0,
 
+            // Actions (consumed by main loop)
+            action: null,
+
             // Syllable Construction Buffer
             syllable: {
                 onset: null,
@@ -69,6 +72,7 @@ export class TypingEngine {
     }
 
     processFrame(gamepad) {
+        this.state.action = null; // Reset action flag
         const input = this.mapper.map(gamepad);
         if (!input) return null;
 
@@ -100,6 +104,7 @@ export class TypingEngine {
 
             this.state.mode = newMode;
             this.state.modeSwitchTime = Date.now(); // Record switch time
+            logger.log('MODE', `Switched to ${newMode}`);
         }
 
         this.handleStickInput(input, this.state.lastInput);
@@ -131,6 +136,7 @@ export class TypingEngine {
             if (curStick.active && curStick.sector) {
                 if (stickState.sector !== curStick.sector) {
                     // Entered new sector
+                    logger.log('SECTOR', `${stickName} -> ${curStick.sector} (${Math.round(curStick.angle)}°)`);
                     stickState.sector = curStick.sector;
                     stickState.enterTime = now;
                 } else {
@@ -259,6 +265,7 @@ export class TypingEngine {
         if (!last) return;
 
         const pressed = (btn) => current.buttons[btn] && !last.buttons[btn];
+        const holdingModifier = current.buttons.north; // Y Button (North)
 
         if (pressed('south')) { // A Button: Space
             this.typeCharacter(' ');
@@ -266,24 +273,41 @@ export class TypingEngine {
         if (pressed('east')) { // B Button: Enter
             this.typeCharacter('\n');
         }
-        if (pressed('west')) { // X Button: Delete
-            this.deleteCharacter();
+
+        // --- EDITING KEYS ---
+
+        // LB (Left Shoulder): Backspace / Ctrl+Backspace
+        if (pressed('lb')) {
+            if (holdingModifier) {
+                // Ctrl+Backspace (Word Left)
+                // We set a flag because TypingEngine doesn't know about words/cursor context fully
+                this.state.action = 'DELETE_WORD_LEFT';
+            } else {
+                // Standard Backspace
+                this.deleteCharacter();
+            }
+        }
+
+        // X (West): Delete (Forward)
+        if (pressed('west')) {
+            // Delete Forward
+            this.state.action = 'DELETE_FORWARD';
+        }
+
+        // RB (Right Shoulder): Tab
+        if (pressed('rb')) {
+            if (holdingModifier) {
+                // Stub: Y + RB
+                console.log("Modifier + RB (Stub)");
+            } else {
+                this.typeCharacter('\t');
+            }
         }
 
         // Case Switching (L3/R3)
         if (pressed('l3') || pressed('r3')) {
             this.state.caseMode = (this.state.caseMode + 1) % 3;
-            console.log("Case Mode:", ['LOWER', 'SHIFT', 'CAPS'][this.state.caseMode]);
-
-            // Re-apply case to current buffer if exists?
-            // Ideally we should refresh the buffer, but the stick logic will overwrite it on next frame if held?
-            // No, if held, we need to force update.
-            // Let's rely on user moving stick or just holding. 
-            // Actually, since stick input logic checks `holdDuration`, it might not re-set the char if sector hasn't changed.
-            // We should force re-evaluation of currently held sticks?
-            // Easier: Just invalidate `sector` in stick state to force update? 
-            // Or simply wait for user to move.
-            // User Request: "click... causes... to be reflected". So immediate update needed.
+            // console.log("Case Mode:", ['LOWER', 'SHIFT', 'CAPS'][this.state.caseMode]);
             this.forceUpdateBuffer();
         }
     }
@@ -335,10 +359,15 @@ export class TypingEngine {
     typeCharacter(char) {
         this.state.text += char;
         console.log("Typed:", char);
+        logger.log('TYPE', `Char: ${JSON.stringify(char)}`);
     }
 
     deleteCharacter() {
-        this.state.text = this.state.text.slice(0, -1);
+        if (this.state.text.length > 0) {
+            const char = this.state.text.slice(-1);
+            this.state.text = this.state.text.slice(0, -1);
+            logger.log('DELETE', `Removed: ${JSON.stringify(char)}`);
+        }
     }
 
     consumeShift() {

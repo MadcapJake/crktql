@@ -521,18 +521,107 @@ gamepadManager.on('frame', (gamepad) => {
       // Safe access helper
       const justPressed = (btn) => dpad[btn] && !editorLastDpad[btn];
 
+      // Modifier State (Y / North)
+      const isModifierHeld = frameInput.buttons.north;
+
       if (justPressed('left')) {
-        cursor = Math.max(0, cursor - 1);
+        if (isModifierHeld) {
+          // Ctrl+Left (Word Left)
+          // find previous space/punctuation?
+          // Simple heuristic: Move left until space, then move left until non-space.
+          let target = cursor - 1;
+          while (target > 0 && /\s/.test(content[target - 1])) target--; // Skip trailing spaces
+          while (target > 0 && !/\s/.test(content[target - 1])) target--; // Skip word
+          cursor = target;
+        } else {
+          cursor = Math.max(0, cursor - 1);
+        }
         handledNav = true;
       }
       if (justPressed('right')) {
-        cursor = Math.min(content.length, cursor + 1);
+        if (isModifierHeld) {
+          // Ctrl+Right (Word Right)
+          let target = cursor;
+          while (target < content.length && !/\s/.test(content[target])) target++; // Skip Word
+          while (target < content.length && /\s/.test(content[target])) target++; // Skip Spaces
+          cursor = target;
+        } else {
+          cursor = Math.min(content.length, cursor + 1);
+        }
+        handledNav = true;
+      }
+      if (justPressed('up')) {
+        if (isModifierHeld) {
+          // Page Up (Approx 10 lines? or just move back arbitrary amount)
+          // hard to know lines without rendering. Let's start with moving back 100 chars or finding newlines?
+          // Simple: Move back 10 newlines.
+          let newLinesFound = 0;
+          let target = cursor;
+          while (target > 0 && newLinesFound < 10) {
+            target--;
+            if (content[target] === '\n') newLinesFound++;
+          }
+          cursor = target;
+        } else {
+          // Standard Up (Previous Line)
+          // Go to last newline
+          const lastNewline = content.lastIndexOf('\n', cursor - 1);
+          if (lastNewline !== -1) {
+            // Find column of current cursor
+            const currentLineStart = content.lastIndexOf('\n', cursor - 1);
+            const col = cursor - currentLineStart - 1;
+
+            // Find start of previous line
+            const prevLineEnd = currentLineStart;
+            const prevLineStart = content.lastIndexOf('\n', prevLineEnd - 1);
+
+            // Target is prevLineStart + col (clamped to prevLineEnd)
+            const lineLen = prevLineEnd - prevLineStart - 1;
+            const targetCol = Math.min(col, lineLen);
+            cursor = (prevLineStart + 1) + targetCol;
+          } else {
+            cursor = 0; // Top of file
+          }
+        }
+        handledNav = true;
+      }
+      if (justPressed('down')) {
+        if (isModifierHeld) {
+          // Page Down (10 lines down)
+          let newLinesFound = 0;
+          let target = cursor;
+          while (target < content.length && newLinesFound < 10) {
+            if (content[target] === '\n') newLinesFound++;
+            target++;
+          }
+          cursor = target;
+        } else {
+          // Standard Down
+          const nextNewline = content.indexOf('\n', cursor);
+          if (nextNewline !== -1) {
+            // Current Col
+            const currentLineStart = content.lastIndexOf('\n', cursor - 1);
+            const col = cursor - (currentLineStart + 1);
+
+            // Length of next line
+            const nextLineStart = nextNewline + 1;
+            const nextLineEnd = content.indexOf('\n', nextLineStart);
+            const actualEnd = nextLineEnd === -1 ? content.length : nextLineEnd;
+            const nextLineLen = actualEnd - nextLineStart;
+
+            const targetCol = Math.min(col, nextLineLen);
+            cursor = nextLineStart + targetCol;
+          } else {
+            cursor = content.length;
+          }
+        }
         handledNav = true;
       }
 
       // Update persistent cursor
       if (handledNav) {
         bookManager.setPartCursor(cursor);
+        renderCustomEditor(part);
       }
 
       // Update tracking for next frame
@@ -541,7 +630,46 @@ gamepadManager.on('frame', (gamepad) => {
       // Typing Logic
       const state = typingEngine.processFrame(gamepad);
       if (state) {
-        // Delta Text Logic
+        // 1. Handle Explicit Actions
+        if (state.action) {
+          let newContent = content;
+          let newCursor = cursor;
+
+          if (state.action === 'DELETE_FORWARD') {
+            if (cursor < content.length) {
+              newContent = content.slice(0, cursor) + content.slice(cursor + 1);
+            }
+          } else if (state.action === 'DELETE_WORD_LEFT') {
+            // Delete until start of previous word
+            let target = cursor - 1;
+            while (target > 0 && /\s/.test(content[target - 1])) target--;
+            while (target > 0 && !/\s/.test(content[target - 1])) target--;
+            newContent = content.slice(0, target) + content.slice(cursor);
+            newCursor = target;
+          }
+
+          if (newContent !== content) {
+            bookManager.setCurrentPartContent(newContent);
+            bookManager.setPartCursor(newCursor);
+
+            // Update local object for immediate render
+            part.content = newContent;
+            part.cursor = newCursor;
+
+            // Reset Engine Text to prevent sync issues?
+            // TypingEngine text is just a buffer, usually empty or growing.
+            // If we delete via action, we ignore state.text this frame?
+            typingEngine.reset(newContent); // Sync engine (optional but safer)
+            lastEngineTextLength = newContent.length;
+          }
+
+          // Render Update
+          renderCustomEditor(part);
+          visualizer.update(frameInput, state.mode, typingEngine.mappings, typingEngine.state.syllable);
+          break; // Skip delta logic this frame
+        }
+
+        // 2. Handle Delta Text (Inserts / Backspaces)
         const currentEngineText = state.text;
         const diff = currentEngineText.length - lastEngineTextLength;
 
@@ -553,22 +681,31 @@ gamepadManager.on('frame', (gamepad) => {
             // Insertion
             const added = currentEngineText.slice(lastEngineTextLength);
             newContent = content.slice(0, cursor) + added + content.slice(cursor);
-            newCursor += diff;
+            newCursor = cursor + diff;
           } else {
-            // Deletion (Backspace)
-            // Remove 'diff' characters BEFORE cursor
-            const charsToDelete = -diff;
-            const start = Math.max(0, cursor - charsToDelete);
+            // Backspace (Standard, from Engine slice)
+            // Engine did `text.slice(0, -1)`.
+            // We map this to "Backspace at Cursor"
+            const amount = -diff;
+            const start = Math.max(0, cursor - amount);
             newContent = content.slice(0, start) + content.slice(cursor);
             newCursor = start;
           }
 
           bookManager.setCurrentPartContent(newContent);
           bookManager.setPartCursor(newCursor);
-          lastEngineTextLength = currentEngineText.length;
+
+          // Update local object for immediate render
+          part.content = newContent;
+          part.cursor = newCursor;
+
         }
 
-        renderCustomEditor(bookManager.getCurrentPart());
+        // Render (Always, to show pending syllable)
+        renderCustomEditor(part);
+
+        // Sync Length
+        lastEngineTextLength = currentEngineText.length;
         visualizer.update(frameInput, state.mode, typingEngine.mappings, typingEngine.state.syllable);
       }
       break;
