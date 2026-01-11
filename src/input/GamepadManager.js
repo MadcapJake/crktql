@@ -7,6 +7,7 @@ export class GamepadManager {
 
     constructor() {
         this.controllers = {};
+        this.activeGamepadIndex = null; // Track which controller is being used
         this.animationFrameId = null;
         this.listeners = {
             'frame': [],
@@ -46,6 +47,12 @@ export class GamepadManager {
     onGamepadConnected(e) {
         console.log("Gamepad connected", e.gamepad);
         this.controllers[e.gamepad.index] = e.gamepad;
+
+        // Default to this one if none active
+        if (this.activeGamepadIndex === null) {
+            this.activeGamepadIndex = e.gamepad.index;
+        }
+
         this.emit('connect', e.gamepad);
 
         // Start polling if this is the first controller
@@ -61,6 +68,11 @@ export class GamepadManager {
     onGamepadDisconnected(e) {
         console.log("Gamepad disconnected", e.gamepad);
         delete this.controllers[e.gamepad.index];
+
+        if (this.activeGamepadIndex === e.gamepad.index) {
+            this.activeGamepadIndex = null; // Will pick new one next poll
+        }
+
         this.emit('disconnect', e.gamepad);
 
         if (Object.keys(this.controllers).length === 0) {
@@ -87,13 +99,29 @@ export class GamepadManager {
         // Gamepad objects are snapshots, we need to query them again each frame
         const gamepads = navigator.getGamepads ? navigator.getGamepads() : (navigator.webkitGetGamepads ? navigator.webkitGetGamepads() : []);
 
+        // 1. Update Controllers & Check Activity (Last Input Wins)
         for (let i = 0; i < gamepads.length; i++) {
-            if (gamepads[i]) {
-                this.controllers[gamepads[i].index] = gamepads[i];
-                this.emit('frame', gamepads[i]);
-                // Ideally we only support the first active controller for now
-                break;
+            const gp = gamepads[i];
+            if (gp) {
+                this.controllers[gp.index] = gp;
+
+                // Check Activity
+                const hasInput = gp.buttons.some(b => b.pressed) || gp.axes.some(a => Math.abs(a) > 0.15);
+                if (hasInput) {
+                    this.activeGamepadIndex = gp.index;
+                }
             }
+        }
+
+        // 2. Fallback if active disconnected
+        if (this.activeGamepadIndex === null || !this.controllers[this.activeGamepadIndex]) {
+            const keys = Object.keys(this.controllers);
+            if (keys.length > 0) this.activeGamepadIndex = parseInt(keys[0]);
+        }
+
+        // 3. Emit for the Active Controller ONLY
+        if (this.activeGamepadIndex !== null && this.controllers[this.activeGamepadIndex]) {
+            this.emit('frame', this.controllers[this.activeGamepadIndex]);
         }
     }
 

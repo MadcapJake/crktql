@@ -115,11 +115,27 @@ export class GridOverview {
         }
 
         // Y (North) -> Rename handled by mod jump? 
-        // User wants Mod+Dpad. Y usually is modifier.
-        // If Y is released quickly without D-pad -> Rename? 
-        // Or specific Rename button? 
-        // User didn't specify Rename shortcut behavior conflict.
-        // Let's assume Modifier priority. Rename might need another trigger or long press Y?
+        // Logic: specific Rename trigger on RELEASE if no jump occurred?
+        // Or simpler: If "isMod" is true but NO dpad movement happened since pressed?
+        // Let's track if mod was used for navigation.
+        if (buttons.north && !this.lastButtons.north) {
+            this.modUsedForNav = false;
+        }
+
+        // Check if movement happened while mod held
+        if (buttons.north && (dpad.up || dpad.down || dpad.left || dpad.right)) {
+            this.modUsedForNav = true;
+        }
+
+        // If Y released and NOT used for nav -> Rename
+        if (!buttons.north && this.lastButtons.north && !this.modUsedForNav) {
+            const part = this.bookManager.getPart(this.cursor.x, this.cursor.y);
+            if (part) {
+                window.dispatchEvent(new CustomEvent('request-rename', {
+                    detail: { x: this.cursor.x, y: this.cursor.y, name: part.name }
+                }));
+            }
+        }
 
         this.lastButtons = { ...buttons, dpad: { ...dpad } };
     }

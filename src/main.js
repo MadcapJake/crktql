@@ -197,9 +197,8 @@ function updateStatusText(mode) {
     html = `
             <span class="notification-persistent">
                 <i class="fa-solid fa-arrows-up-down-left-right icon-blue"></i> Pan&emsp;
-                <i class="fa-solid fa-magnifying-glass-plus icon-green"></i> LB Zoom In&emsp;
-                <i class="fa-solid fa-magnifying-glass-minus icon-red"></i> RB Zoom Out&emsp;
-                <i class="fa-solid fa-y icon-yellow"></i> + Dir: Jump
+                <i class="fa-solid fa-y icon-yellow"></i> Rename Part&emsp;
+                <i class="fa-solid fa-y icon-yellow"></i><i class="fa-solid fa-plus"></i> <i class="fa-solid fa-arrows-up-down-left-right icon-blue"></i> Jump
             </span>
         `;
   } else if (mode === 'RENAMING') {
@@ -447,6 +446,7 @@ window.addEventListener('request-editor-focus', () => {
 });
 
 window.addEventListener('request-rename', (e) => {
+  console.log("Request Rename Data:", e.detail);
   const { x, y, name } = e.detail;
   // Previously opened modal. Now we switch to RENAMING mode inline.
   // We need to know WHICH part we are renaming to block movement?
@@ -454,13 +454,33 @@ window.addEventListener('request-rename', (e) => {
 
   // Actually, GridOverview dispatches this.
   // We should switch TypingEngine to the name content.
-  typingEngine.reset(name ? name.trim() : '');
+  const initialName = name ? name.trim() : '';
+  console.log("Renaming Initial Name:", initialName);
+
+  typingEngine.reset(initialName);
+  console.log("Buffer after reset:", typingEngine.getBufferText());
+
+  // Set cursor to end
+  typingEngine.state.cursor = initialName.length;
 
   // Store target coordinates in focusManager or a temp var? 
   // Let's attach it to focusManager for convenience
   focusManager.renameTarget = { x, y, oldName: name };
 
+  focusManager.renameState = {
+    content: initialName,
+    cursor: initialName.length,
+    lastLength: initialName.length,
+    lastDpad: { up: false, down: false, left: false, right: false }
+  };
+
   focusManager.setMode('RENAMING');
+
+  // Force immediate render so we don't see the old content even for a frame
+  renderCustomEditor({
+    content: initialName,
+    cursor: initialName.length
+  });
 });
 
 // --- Main Loop ---
@@ -529,23 +549,94 @@ gamepadManager.on('frame', (gamepad) => {
       updateDebugUI(frameInput, gamepad, null);
       break;
 
-    case 'EDITOR':
-      // Switch to Overview: Right Shoulder (Zoom Out)
-      // Check for simple press
-      if (frameInput.buttons.rb && !gamepadManager.lastButtons.rb) {
-        // If NOT in Visual Select? Visual Select uses Y+RB.
-        // This check is simple button press.
-        // But wait, Y+RB check triggers Visual Select.
-        // If we press only RB -> Zoom Out?
-        // If we are holding Y, we enter Visual Select.
-        // So check !isModifierHeld.
-        if (!frameInput.buttons.north) {
-          focusManager.setMode('OVERVIEW');
-          updateStatusText('OVERVIEW');
-          return; // Skip rest
-        }
+
+    case 'RENAMING':
+      const rState = focusManager.renameState;
+      if (!rState) break; // Safety
+
+      // 1. SAVE (B)
+      if (frameInput.buttons.east && !gamepadManager.lastButtons.east) {
+        const newName = rState.content;
+        const { x, y } = focusManager.renameTarget;
+        bookManager.renamePart(x, y, newName);
+        focusManager.setMode('OVERVIEW');
+        gridOverview.updateView(true);
+        showNotification(`Part renamed to "${newName}"`);
+        break;
       }
 
+      // 2. CANCEL (Select)
+      if (selectPressed && !gamepadManager.lastSelect) {
+        focusManager.setMode('OVERVIEW');
+        showNotification("Renaming Cancelled");
+        break;
+      }
+
+      // 3. Navigation (D-Pad)
+      const rDpad = frameInput.buttons.dpad;
+      const rJustPressed = (btn) => rDpad[btn] && !rState.lastDpad[btn];
+
+      if (rJustPressed('left')) {
+        rState.cursor = Math.max(0, rState.cursor - 1);
+      }
+      if (rJustPressed('right')) {
+        rState.cursor = Math.min(rState.content.length, rState.cursor + 1);
+      }
+      rState.lastDpad = { ...rDpad };
+
+      // 4. Typing (Diff Logic)
+      const rEngineState = typingEngine.processFrame(gamepad);
+      const rCurrentText = typingEngine.getBufferText();
+      const rDiff = rCurrentText.length - rState.lastLength;
+
+      if (rDiff !== 0) {
+        if (rDiff > 0) {
+          // Insertion
+          const added = rCurrentText.slice(rState.lastLength);
+          rState.content = rState.content.slice(0, rState.cursor) + added + rState.content.slice(rState.cursor);
+          rState.cursor += rDiff;
+        } else {
+          // Backspace (Engine removed from end)
+          const amount = -rDiff;
+          const start = Math.max(0, rState.cursor - amount);
+          rState.content = rState.content.slice(0, start) + rState.content.slice(rState.cursor);
+          rState.cursor = start;
+        }
+
+        // Sync Engine to match our modified content
+        typingEngine.reset(rState.content);
+        rState.lastLength = rState.content.length;
+      }
+
+      // 5. Render
+      renderCustomEditor({
+        content: rState.content,
+        cursor: rState.cursor
+      });
+
+      break;
+
+    case 'EDITOR':
+      const part = bookManager.getCurrentPart();
+      if (!part) break;
+
+      let cursor = part.cursor || 0;
+      const content = part.content || "";
+
+      // TAB: RB (Right Shoulder) - Only if NOT holding Modifier
+      // Modifier + RB is handled later for Visual Select
+      if (frameInput.buttons.rb && !gamepadManager.lastButtons?.rb && !frameInput.buttons.north) {
+        const newContent = content.slice(0, cursor) + '\t' + content.slice(cursor);
+        bookManager.setCurrentPartContent(newContent);
+        bookManager.setPartCursor(cursor + 1);
+
+        // Sync render and engine
+        part.content = newContent;
+        part.cursor = cursor + 1;
+        renderCustomEditor(part);
+        typingEngine.reset(newContent);
+        lastEngineTextLength = newContent.length;
+      }
       // D-Pad Cursor Movement (One press per frame or throttled? Let's use simple press check for now)
       // Actually per-frame pressed check is too fast. Need simple one-shot or repeat.
       // GamepadManager doesn't give "just pressed" for D-pad easily without tracking lastDpad relative to this specific loop?
@@ -560,11 +651,6 @@ gamepadManager.on('frame', (gamepad) => {
       // Simpler: Just check edge detection here.
       // Limitation: No key repeat for now (User didn't explicitly ask, but good UX requires it. Sticking to single press for MVP).
 
-      const part = bookManager.getCurrentPart();
-      if (!part) break;
-
-      let cursor = part.cursor || 0;
-      const content = part.content || "";
       let handledNav = false;
 
       // Safe access helper

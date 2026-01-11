@@ -381,6 +381,10 @@ export class TypingEngine {
         this.state.onsetOwner = null;
     }
 
+    getBufferText() {
+        return this.state.text;
+    }
+
     reset(text = '') {
         this.state.text = text;
         this.clearSyllable();
