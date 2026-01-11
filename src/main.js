@@ -11,6 +11,7 @@ import { BookManager } from './data/BookManager.js';
 import { FocusManager } from './ui/FocusManager.js';
 import { NavigationBar } from './ui/NavigationBar.js';
 import { GridOverview } from './ui/GridOverview.js';
+import { InputDebugOverlay } from './ui/InputDebugOverlay.js'; // Moved up
 
 document.querySelector('#app').innerHTML = `
   <div class="container">
@@ -65,6 +66,8 @@ const settingsManager = new SettingsManager(); // Keep this for config
 const gamepadManager = new GamepadManager();
 const typingEngine = new TypingEngine();
 const gamepadMenu = new GamepadMenu();
+// --- DEBUG OVERLAY ---
+const debugOverlay = new InputDebugOverlay(gamepadManager, typingEngine.mapper);
 
 
 gamepadMenu.onCalibrate = () => {
@@ -401,17 +404,31 @@ if (gearBtn) {
 }
 
 settingsManager.onUpdate = (config) => {
+  console.log('[Settings] Update received:', config);
+
   // Apply Settings
   const vContainer = document.getElementById('visualizer-container');
   const dStatus = document.getElementById('debug-status');
   const editor = document.getElementById('editor-view');
+  const exportBtn = document.getElementById('export-logs-btn');
+
+  console.log('[Settings] Elements found:', {
+    vContainer: !!vContainer,
+    dStatus: !!dStatus,
+    exportBtn: !!exportBtn
+  });
 
   if (vContainer) {
-    vContainer.style.opacity = config.visualizer ? '1' : '0';
+    const showVis = config.visualizer ? '1' : '0';
+    console.log('[Settings] Setting visualizer opacity to:', showVis);
+    vContainer.style.opacity = showVis;
+    // Also set visibility to ensure it doesn't block clicks if 0 opacity
+    vContainer.style.visibility = config.visualizer ? 'visible' : 'hidden';
 
     // Apply Placement Class
     vContainer.className = 'visualizer'; // Reset
     const placement = config.visualizerPlacement || 'BOTTOM_CENTER';
+    console.log('[Settings] Visualizer placement:', placement);
 
     if (placement === 'BOTTOM_CENTER') vContainer.classList.add('vis-bottom-center');
     else if (placement === 'BOTTOM_OUTER') vContainer.classList.add('vis-bottom-outer');
@@ -431,11 +448,22 @@ settingsManager.onUpdate = (config) => {
     }
   }
 
-  const exportBtn = document.getElementById('export-logs-btn');
+  if (exportBtn) {
+    console.log('[Settings] Toggling Export Button. Debug:', config.debug);
+    // Force inline style update
+    if (!config.debug) {
+      exportBtn.style.setProperty('display', 'none', 'important');
+    } else {
+      exportBtn.style.display = ''; // Reset to default (CSS handled)
+      // If CSS is hidden by default (it shouldn't be), this might fail.
+      // But user said it IS showing. So default is visible.
+    }
+  } else {
+    console.warn('[Settings] Export Button NOT found!');
+  }
 
   if (dStatus) {
     dStatus.style.display = config.debug ? 'block' : 'none';
-    if (exportBtn) exportBtn.style.display = config.debug ? 'flex' : 'none';
 
     // Dynamic Placement
     dStatus.className = ''; // Reset
@@ -449,6 +477,14 @@ settingsManager.onUpdate = (config) => {
     }
 
     dStatus.classList.add(placement);
+  }
+
+  // Sync InputDebugOverlay visibility
+  if (typeof debugOverlay !== 'undefined') {
+    debugOverlay.visible = config.debug;
+    if (debugOverlay.element) {
+      debugOverlay.element.style.display = config.debug ? 'block' : 'none';
+    }
   }
 
   typingEngine.mapper.DEADZONE = config.deadzone;
@@ -1495,19 +1531,12 @@ function updateIndicators() {
     cInd.innerHTML = icon;
   }
 }
-// --- DEBUG OVERLAY ---
-import { InputDebugOverlay } from './ui/InputDebugOverlay.js';
-const debugOverlay = new InputDebugOverlay(gamepadManager, typingEngine.mapper);
-
-// Sync with Settings
+// Sync with Settings (Initial)
 debugOverlay.visible = settingsManager.config.debug;
 if (debugOverlay.visible) debugOverlay.element.style.display = 'block';
 else debugOverlay.element.style.display = 'none';
 
-settingsManager.onUpdate = (config) => {
-  debugOverlay.visible = config.debug;
-  debugOverlay.element.style.display = config.debug ? 'block' : 'none';
-};
+// Rogue onUpdate removed here. Logic moved to main handler.
 
 // --- Robust Export Logic ---
 const exportBtn = document.getElementById('export-logs-btn');

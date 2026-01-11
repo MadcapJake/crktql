@@ -22,13 +22,7 @@ export class SettingsManager extends SubMenu {
             { key: 'onsetConflict', label: 'Onset Conflict', type: 'select', values: ['COMMIT', 'IGNORE', 'SWITCH'] },
             { key: 'done', label: 'Done', type: 'action', className: 'done-btn' }
         ];
-
-        this.onUpdateCallback = null;
     }
-
-    // Setter for onUpdate
-    set onUpdate(cb) { this.onUpdateCallback = cb; }
-    get onUpdate() { return this.onUpdateCallback; }
 
     onConfirm(option) {
         if (option.key === 'done') {
@@ -52,9 +46,15 @@ export class SettingsManager extends SubMenu {
 
     toggleOption(option) {
         if (option.type === 'toggle') {
+            console.log(`[SettingsManager] Toggling ${option.key}. onUpdate is:`, this.onUpdate);
             this.config[option.key] = !this.config[option.key];
             this.render();
-            if (this.onUpdateCallback) this.onUpdateCallback(this.config);
+            if (this.onUpdate) {
+                console.log('[SettingsManager] Calling onUpdate...');
+                this.onUpdate(this.config);
+            } else {
+                console.warn('[SettingsManager] onUpdate is missing!');
+            }
         } else if (option.type === 'select' || option.type === 'range') {
             // Tapping A on select/range circles forward
             this.onRight(option);
@@ -67,7 +67,7 @@ export class SettingsManager extends SubMenu {
         if (val < option.min) val = option.min;
         this.config[option.key] = parseFloat(val.toFixed(1));
         this.render();
-        if (this.onUpdateCallback) this.onUpdateCallback(this.config);
+        if (this.onUpdate) this.onUpdate(this.config);
     }
 
     adjustSelect(option, dir) {
@@ -75,7 +75,7 @@ export class SettingsManager extends SubMenu {
         const nextIdx = (currIdx + dir + option.values.length) % option.values.length;
         this.config[option.key] = option.values[nextIdx];
         this.render();
-        if (this.onUpdateCallback) this.onUpdateCallback(this.config);
+        if (this.onUpdate) this.onUpdate(this.config);
     }
 
     renderItemContent(opt) {
