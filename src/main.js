@@ -873,10 +873,28 @@ gamepadManager.on('frame', (gamepad) => {
       if (frameInput.buttons.west && !gamepadManager.lastButtons.west) {
         const rangeText = getSelectionText(vPart);
         if (rangeText) {
+          // Capture indices synchronously before anchor is cleared
+          const sStart = Math.min(selectionAnchor, vPart.cursor);
+          const sEnd = Math.max(selectionAnchor, vPart.cursor);
+          const originalContent = vPart.content; // Capture content too just in case
+
           navigator.clipboard.writeText(rangeText).then(() => {
-            // Delete content
-            deleteSelection(vPart);
+            // Delete content using captured indices
+            const newContent = originalContent.slice(0, sStart) + originalContent.slice(sEnd);
+
+            bookManager.setCurrentPartContent(newContent);
+            bookManager.setPartCursor(sStart);
+
+            // Sync Engine
+            typingEngine.reset(newContent);
+            lastEngineTextLength = newContent.length;
+
             showNotification("Cut to Clipboard");
+
+            // Force re-render to show deletion
+            const updatedPart = bookManager.getCurrentPart();
+            if (updatedPart) renderCustomEditor(updatedPart);
+
           }).catch(e => console.error("Cut failed", e));
         }
         exitVisualSelect();
