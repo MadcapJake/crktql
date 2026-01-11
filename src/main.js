@@ -50,6 +50,7 @@ document.querySelector('#app').innerHTML = `
             <div id="export-logs-btn" class="settings-trigger" title="Export Debug Logs"><i class="fa-solid fa-file-export"></i></div>
             <div id="gamepad-btn" class="settings-trigger" title="Controller Info"><i class="fa-solid fa-gamepad"></i></div>
             <div id="settings-btn" class="settings-trigger"><i class="fa-solid fa-gear"></i></div>
+            <div id="help-btn" class="settings-trigger" title="Help"><i class="fa-solid fa-circle-question"></i></div>
             <div id="new-book-btn" class="settings-trigger" title="New Book"><i class="fa-solid fa-book-medical"></i></div>
             <div id="save-book-btn" class="settings-trigger" title="Save Book"><i class="fa-regular fa-floppy-disk"></i></div>
             <div id="open-book-btn" class="settings-trigger" title="Open Book"><i class="fa-solid fa-book-open"></i></div>
@@ -66,6 +67,7 @@ const settingsManager = new SettingsManager(); // Keep this for config
 const gamepadManager = new GamepadManager();
 const typingEngine = new TypingEngine();
 const gamepadMenu = new GamepadMenu();
+
 
 gamepadMenu.onCalibrate = () => {
   const modal = document.getElementById('calibration-modal');
@@ -142,6 +144,8 @@ let selectionAnchor = null;
 
 const bookManager = new BookManager();
 const focusManager = new FocusManager();
+import { HelpManager } from './ui/HelpManager.js';
+const helpManager = new HelpManager(focusManager);
 const navBar = new NavigationBar('bottom-bar');
 const gridOverview = new GridOverview('grid-overview', bookManager);
 
@@ -308,6 +312,14 @@ settingsManager.onAction = (action) => {
 };
 
 // Button Handlers
+document.getElementById('help-btn')?.addEventListener('click', () => {
+  helpManager.toggle();
+});
+
+window.addEventListener('request-help-toggle', (e) => {
+  helpManager.toggle(e.detail.input);
+});
+
 document.getElementById('new-book-btn')?.addEventListener('click', () => {
   // New Book
   showConfirmModal('Create new book? Unsaved changes will be lost.', () => {
@@ -600,6 +612,10 @@ gamepadManager.on('frame', (gamepad) => {
 
   // 5. Route Input based on Focus
   switch (focusManager.mode) {
+    case 'HELP':
+      helpManager.handleInput(frameInput);
+      break;
+
     case 'OVERVIEW':
       // Route all input to GridOverview
       gridOverview.handleInput(frameInput);
