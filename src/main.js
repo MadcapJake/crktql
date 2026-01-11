@@ -84,24 +84,44 @@ gamepadMenu.onCalibrate = () => {
 };
 
 // Handle Connection Events for UI
-window.addEventListener("gamepadconnected", (e) => {
+const updateGamepadUI = (gp) => {
   const btn = document.getElementById('gamepad-btn');
   if (btn) {
     btn.classList.remove('shake', 'status-warning');
     btn.classList.add('status-success');
     setTimeout(() => btn.classList.remove('status-success'), 1000);
   }
-  showNotification("Game controller connected!", 2000);
-  gamepadMenu.setGamepadInfo({ id: e.gamepad.id, index: e.gamepad.index });
+  let gpName = gp.id.split('(')[0].trim()
+  if (gpName.length > 20) {
+    gpName = gpName.slice(0, 20) + '...';
+  }
+  showNotification(`🎮️ ${gpName}`, 2000); // Shorter msg, indicating switch
+  gamepadMenu.setGamepadInfo({ id: gp.id, index: gp.index });
+};
+
+gamepadManager.on('active-change', (gp) => {
+  updateGamepadUI(gp);
+});
+
+window.addEventListener("gamepadconnected", (e) => {
+  // Always update UI on new connection to ensure immediate feedback
+  updateGamepadUI(e.gamepad);
+  // showNotification("Game controller connected!", 2000);
 });
 
 window.addEventListener("gamepaddisconnected", (e) => {
-  const btn = document.getElementById('gamepad-btn');
-  if (btn) {
-    btn.classList.add('shake', 'status-warning');
+  // Only show warning if the *Active* one disconnected.
+  // We can't easily know if 'e.gamepad' was the active one here without checking state.
+  // logic: if no controllers left, then warn.
+
+  if (Object.keys(gamepadManager.controllers).length === 0) {
+    const btn = document.getElementById('gamepad-btn');
+    if (btn) {
+      btn.classList.add('shake', 'status-warning');
+    }
+    showNotification("No game controller connected", 5000);
+    gamepadMenu.setGamepadInfo(null);
   }
-  showNotification("No game controller connected", 5000);
-  gamepadMenu.setGamepadInfo(null);
 });
 
 // Initial State Check

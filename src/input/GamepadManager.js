@@ -8,11 +8,13 @@ export class GamepadManager {
     constructor() {
         this.controllers = {};
         this.activeGamepadIndex = null; // Track which controller is being used
+        this.lastActiveGamepadIndex = null;
         this.animationFrameId = null;
         this.listeners = {
             'frame': [],
             'connect': [],
-            'disconnect': []
+            'disconnect': [],
+            'active-change': []
         };
 
         window.addEventListener("gamepadconnected", this.onGamepadConnected.bind(this));
@@ -71,6 +73,7 @@ export class GamepadManager {
 
         if (this.activeGamepadIndex === e.gamepad.index) {
             this.activeGamepadIndex = null; // Will pick new one next poll
+            this.lastActiveGamepadIndex = null; // FORCE RESET to ensure re-connection of same index triggers event
         }
 
         this.emit('disconnect', e.gamepad);
@@ -119,7 +122,17 @@ export class GamepadManager {
             if (keys.length > 0) this.activeGamepadIndex = parseInt(keys[0]);
         }
 
-        // 3. Emit for the Active Controller ONLY
+        // 3. Emit Activty Change Check
+        if (this.activeGamepadIndex !== this.lastActiveGamepadIndex) {
+            const newGp = this.controllers[this.activeGamepadIndex];
+            if (newGp) {
+                console.log("Active Gamepad Switched:", newGp.index);
+                this.emit('active-change', newGp);
+            }
+            this.lastActiveGamepadIndex = this.activeGamepadIndex;
+        }
+
+        // 4. Emit FRAME for the Active Controller ONLY
         if (this.activeGamepadIndex !== null && this.controllers[this.activeGamepadIndex]) {
             this.emit('frame', this.controllers[this.activeGamepadIndex]);
         }
@@ -127,6 +140,7 @@ export class GamepadManager {
 
     // Simple event emitter
     on(event, callback) {
+        if (!this.listeners[event]) this.listeners[event] = []; // Safety init
         if (this.listeners[event]) {
             this.listeners[event].push(callback);
         }
