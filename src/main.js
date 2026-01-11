@@ -993,6 +993,7 @@ gamepadManager.on('frame', (gamepad) => {
 
   // Debug UI always updates if visible
   updateDebugUI(frameInput, gamepad, null);
+  updateIndicators();
 });
 
 
@@ -1141,11 +1142,19 @@ function updateIndicators() {
 
   if (mInd) {
     let icon = '';
+    const leftLocked = state.leftStick?.locked;
+    const rightLocked = state.rightStick?.locked;
+    const isSelectionActive = leftLocked || rightLocked || state.syllable?.onset; // "Selected Consonant" mode
+
     switch (state.mode) {
-      case 'ONSET': icon = '<i class="fa-solid fa-circle-half-stroke"></i>'; break;
-      case 'RIME_LEFT': icon = '<i class="fa-solid fa-circle-chevron-left"></i>'; break;
-      case 'RIME_RIGHT': icon = '<i class="fa-solid fa-circle-chevron-right"></i>'; break;
-      case 'PUNCTUATION': icon = '<i class="fa-solid fa-circle-minus"></i>'; break;
+      case 'ONSET':
+        icon = isSelectionActive
+          ? '<i class="fa-regular fa-square"></i>'
+          : '<i class="fa-solid fa-border-none"></i>';
+        break;
+      case 'RIME_LEFT': icon = '<i class="fa-solid fa-square-caret-left"></i>'; break;
+      case 'RIME_RIGHT': icon = '<i class="fa-solid fa-square-caret-right"></i>'; break;
+      case 'PUNCTUATION': icon = '<i class="fa-solid fa-square-minus"></i>'; break;
       default: icon = state.mode;
     }
     mInd.innerHTML = icon;
@@ -1158,6 +1167,7 @@ function updateIndicators() {
       case 1: icon = '<i class="fa-regular fa-circle-up"></i>'; break; // Shift
       case 2: icon = '<i class="fa-solid fa-circle-up"></i>'; break; // Caps
     }
+    cInd.innerHTML = icon;
   }
 }
 
