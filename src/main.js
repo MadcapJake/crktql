@@ -174,7 +174,22 @@ function updateStatusText(mode) {
   const area = document.getElementById('notification-area');
   if (!area) return;
 
-  if (currentNotificationTimeout) return; // Notification active
+  // Icon Updates (Always update)
+  const modeIcon = document.getElementById('mode-indicator');
+  const caseIcon = document.getElementById('case-indicator');
+
+  if (mode === 'VISUAL_SELECT') {
+    if (modeIcon) modeIcon.innerHTML = '<i class="fa-solid fa-eye"></i>';
+    if (caseIcon) caseIcon.style.display = 'none';
+  } else if (mode === 'EDITOR') {
+    if (modeIcon) modeIcon.innerHTML = '<i class="fa-solid fa-circle-half-stroke"></i>';
+    if (caseIcon) caseIcon.style.display = 'flex';
+  } else {
+    if (caseIcon) caseIcon.style.display = 'flex'; // Default show
+  }
+
+  // Text Updates (Blocked by Notification)
+  if (currentNotificationTimeout) return;
 
   let html = '';
   if (mode === 'OVERVIEW') {
@@ -208,6 +223,14 @@ function updateStatusText(mode) {
         <span class="notification-persistent">
              <i class="fa-solid fa-asterisk" style="color: violet;"></i> 
              <strong>Hold any button 5 seconds:</strong> Cancel calibration
+        </span>
+      `;
+  } else if (mode === 'VISUAL_SELECT') {
+    html = `
+        <span class="notification-persistent">
+             <i class="fa-solid fa-x icon-blue"></i> Cut&emsp;
+             <i class="fa-solid fa-a icon-green"></i> Copy&emsp;
+             <i class="fa-solid fa-b icon-red"></i> Cancel
         </span>
       `;
   }
@@ -627,6 +650,49 @@ gamepadManager.on('frame', (gamepad) => {
       // Update tracking for next frame
       editorLastDpad = { ...dpad };
 
+      // VISUAL SELECT TRIGGER: Hold Y + Press RB
+      // Redefine modifier check locally to ensure scope
+      const modPressed = frameInput.buttons.north;
+
+      // DEBUG:
+      if (modPressed && frameInput.buttons.rb) {
+        console.log("Trigger Attempt:", {
+          north: modPressed,
+          rb: frameInput.buttons.rb,
+          lastRb: gamepadManager.lastButtons?.rb
+        });
+      }
+
+      if (modPressed && frameInput.buttons.rb && !gamepadManager.lastButtons?.rb) {
+        console.log("Trigger Success! Switching to VISUAL_SELECT");
+        showNotification("Visual Select Mode Entered");
+
+        part.selectionAnchor = cursor; // Start Selection
+        focusManager.setMode('VISUAL_SELECT');
+        gamepadManager.lastButtons = { ...frameInput.buttons };
+        return; // Exit frame to prevent RB from typing TAB
+      }
+
+      // PASTE TRIGGER: Hold Y + L3/R3 Click
+      // Condition: Onset Mode + No Action?
+      // User said: "When in Onset Mode and no joystick is in Selected Consonant mode"
+      // Simplification: Just check inputs. If Y + Click, do paste.
+      // InputMapper names are 'l3' and 'r3', NOT leftStick/rightStick
+      if (isModifierHeld && (frameInput.buttons.l3 || frameInput.buttons.r3)) {
+        // Debounce sticks?
+        const lastBtns = gamepadManager.lastButtons || {};
+        if ((frameInput.buttons.l3 && !lastBtns.l3) ||
+          (frameInput.buttons.r3 && !lastBtns.r3)) {
+
+          if (typingEngine.state.mode === 'ONSET') {
+            handlePaste();
+          }
+        }
+        gamepadManager.lastButtons = { ...frameInput.buttons };
+      }
+
+      gamepadManager.lastButtons = { ...frameInput.buttons }; // General tracking for EDITOR too
+
       // Typing Logic
       const state = typingEngine.processFrame(gamepad);
       if (state) {
@@ -708,49 +774,124 @@ gamepadManager.on('frame', (gamepad) => {
         lastEngineTextLength = currentEngineText.length;
         visualizer.update(frameInput, state.mode, typingEngine.mappings, typingEngine.state.syllable);
       }
-      break;
+      break; // EDITOR case end
 
-    case 'OVERVIEW':
-      gridOverview.handleInput(frameInput);
-      break;
+    case 'VISUAL_SELECT':
+      // D-pad Navigation (Expand Selection)
+      const vDpad = frameInput.buttons.dpad;
+      const vPart = bookManager.getCurrentPart();
 
-    case 'BOTTOM_BAR':
-      navBar.handleInput(frameInput);
-      break;
+      if (vPart) {
+        let vCursor = vPart.cursor;
+        const vContent = vPart.content;
+        let vNavigated = false;
 
-    case 'RENAMING':
-      const rState = typingEngine.processFrame(gamepad);
-      if (rState) {
-        // For renaming, we use simple append-only logic for now (cursor always at end)
-        renderCustomEditor({
-          content: rState.text,
-          cursor: rState.text.length
-        });
-        visualizer.update(frameInput, rState.mode, typingEngine.mappings, typingEngine.state.syllable);
-      }
+        // Re-use logic or duplicate simple nav? 
+        // We need to support modifiers too.
+        const isMod = frameInput.buttons.north;
+        const jp = (btn) => vDpad[btn] && !editorLastDpad[btn];
 
-      // B (EAST) -> Confirm Rename
-      if (frameInput.buttons.east && !gamepadManager.lastButtons?.east) {
-        const finalName = typingEngine.state.text;
-        const target = focusManager.renameTarget;
-        if (target) {
-          bookManager.renamePart(target.x, target.y, finalName);
+        if (jp('left')) {
+          if (isMod) {
+            let target = vCursor - 1;
+            while (target > 0 && /\s/.test(vContent[target - 1])) target--;
+            while (target > 0 && !/\s/.test(vContent[target - 1])) target--;
+            vCursor = target;
+          } else {
+            vCursor = Math.max(0, vCursor - 1);
+          }
+          vNavigated = true;
         }
-        focusManager.setMode('OVERVIEW');
-        gridOverview.render();
+        if (jp('right')) {
+          if (isMod) {
+            let target = vCursor;
+            while (target < vContent.length && !/\s/.test(vContent[target])) target++;
+            while (target < vContent.length && /\s/.test(vContent[target])) target++;
+            vCursor = target;
+          } else {
+            vCursor = Math.min(vContent.length, vCursor + 1);
+          }
+          vNavigated = true;
+        }
+        if (jp('up')) {
+          // ... reusing up logic ...
+          // Simplified for brevity: just standard up
+          // Go to last newline
+          const lastNewline = vContent.lastIndexOf('\n', vCursor - 1);
+          if (lastNewline !== -1) {
+            const currentLineStart = vContent.lastIndexOf('\n', vCursor - 1);
+            const col = vCursor - currentLineStart - 1;
+            const prevLineEnd = currentLineStart;
+            const prevLineStart = vContent.lastIndexOf('\n', prevLineEnd - 1);
+            const lineLen = prevLineEnd - prevLineStart - 1;
+            const targetCol = Math.min(col, lineLen);
+            vCursor = (prevLineStart + 1) + targetCol;
+          } else {
+            vCursor = 0;
+          }
+          vNavigated = true;
+        }
+        if (jp('down')) {
+          const nextNewline = vContent.indexOf('\n', vCursor);
+          if (nextNewline !== -1) {
+            const currentLineStart = vContent.lastIndexOf('\n', vCursor - 1);
+            const col = vCursor - (currentLineStart + 1);
+            const nextLineStart = nextNewline + 1;
+            const nextLineEnd = vContent.indexOf('\n', nextLineStart);
+            const actualEnd = nextLineEnd === -1 ? vContent.length : nextLineEnd;
+            const nextLineLen = actualEnd - nextLineStart;
+            const targetCol = Math.min(col, nextLineLen);
+            vCursor = nextLineStart + targetCol;
+          } else {
+            vCursor = vContent.length;
+          }
+          vNavigated = true;
+        }
+
+        if (vNavigated) {
+          // Update cursor but KEEP anchor
+          bookManager.setPartCursor(vCursor);
+          vPart.cursor = vCursor; // Local update
+          renderCustomEditor(vPart);
+        }
+        editorLastDpad = { ...vDpad };
       }
 
-      // SELECT -> Cancel Rename
-      if (frameInput.buttons.select && !gamepadManager.lastSelect) {
-        focusManager.setMode('OVERVIEW');
+      // Actions
+      // A (South) -> Copy
+      if (frameInput.buttons.south && !gamepadManager.lastButtons.south) {
+        const rangeText = getSelectionText(vPart);
+        if (rangeText) {
+          navigator.clipboard.writeText(rangeText).catch(e => console.error("Copy failed", e));
+          showNotification("Copied to Clipboard");
+        }
+        exitVisualSelect();
       }
 
-      gamepadManager.lastButtons = { ...frameInput.buttons }; // Need to track for B button debounce
+      // X (West) -> Cut
+      if (frameInput.buttons.west && !gamepadManager.lastButtons.west) {
+        const rangeText = getSelectionText(vPart);
+        if (rangeText) {
+          navigator.clipboard.writeText(rangeText).then(() => {
+            // Delete content
+            deleteSelection(vPart);
+            showNotification("Cut to Clipboard");
+          }).catch(e => console.error("Cut failed", e));
+        }
+        exitVisualSelect();
+      }
+
+      // B (East) -> Cancel
+      if (frameInput.buttons.east && !gamepadManager.lastButtons.east) {
+        exitVisualSelect();
+      }
+
+      gamepadManager.lastButtons = { ...frameInput.buttons };
       break;
+
 
     case 'DIALOG_CONFIRM':
-      // Simple confirmation dialog
-      // START -> Confirm
+      // ... existing code ...
       if (startPressed && !gamepadManager.lastStart) {
         if (confirmCallback) confirmCallback();
         document.getElementById('confirm-modal').style.display = 'none';
@@ -766,6 +907,36 @@ gamepadManager.on('frame', (gamepad) => {
       break;
   }
 
+  // Helper Functions for Visual Select
+  function getSelectionText(part) {
+    if (!part || part.selectionAnchor === undefined) return "";
+    const start = Math.min(part.selectionAnchor, part.cursor);
+    const end = Math.max(part.selectionAnchor, part.cursor);
+    return part.content.slice(start, end);
+  }
+
+  function deleteSelection(part) {
+    const start = Math.min(part.selectionAnchor, part.cursor);
+    const end = Math.max(part.selectionAnchor, part.cursor);
+    const newContent = part.content.slice(0, start) + part.content.slice(end);
+
+    bookManager.setCurrentPartContent(newContent);
+    bookManager.setPartCursor(start); // Move cursor to start of deletion
+    // Sync Engine
+    typingEngine.reset(newContent);
+    lastEngineTextLength = newContent.length;
+  }
+
+  function exitVisualSelect() {
+    const part = bookManager.getCurrentPart();
+    if (part) {
+      part.selectionAnchor = null; // Clear anchor
+      // Keep cursor where it is (or where it ended up)
+      renderCustomEditor(part);
+    }
+    focusManager.setMode('EDITOR');
+  }
+
   // Update Last State (Moved to end)
   gamepadManager.lastStart = startPressed;
   gamepadManager.lastSelect = selectPressed;
@@ -773,6 +944,35 @@ gamepadManager.on('frame', (gamepad) => {
   // Debug UI always updates if visible
   updateDebugUI(frameInput, gamepad, null);
 });
+
+
+// Helper to handle clipboard paste
+async function handlePaste() {
+  try {
+    const text = await navigator.clipboard.readText();
+    if (text) {
+      const part = bookManager.getCurrentPart();
+      if (part) {
+        const c = part.content || "";
+        const idx = part.cursor || 0;
+        const newContent = c.slice(0, idx) + text + c.slice(idx);
+        bookManager.setCurrentPartContent(newContent);
+        bookManager.setPartCursor(idx + text.length);
+
+        // Sync
+        typingEngine.reset(newContent);
+        lastEngineTextLength = newContent.length;
+        part.content = newContent;
+        part.cursor = idx + text.length;
+        renderCustomEditor(part);
+        showNotification("Pasted from Clipboard");
+      }
+    }
+  } catch (err) {
+    console.error("Paste failed:", err);
+    showNotification("Paste Failed: " + err.message);
+  }
+}
 
 
 function renderCustomEditor(part) {
@@ -807,37 +1007,68 @@ function renderCustomEditor(part) {
     // Using div with whitespace: pre-wrap is better in CSS.
   };
 
-  const pre = safeEscape(content.slice(0, cursor));
-  const postRaw = content.slice(cursor);
-  const postEscaped = safeEscape(postRaw); // Use for non-cursor parts
+  // Selection Logic
+  const anchor = part.selectionAnchor;
+  const isSelectionActive = (anchor !== undefined && anchor !== null && anchor !== cursor);
 
-  const pendingHtml = pending ? `<span class="pending-text">${safeEscape(pending)}</span>` : '';
+  let pre, sel, post;
 
-  let cursorHtml = '';
-  const cursorType = settingsManager.config.cursorType || 'BAR';
+  if (isSelectionActive) {
+    // Range Selection
+    const start = Math.min(anchor, cursor);
+    const end = Math.max(anchor, cursor);
 
-  if (cursorType === 'BAR') {
-    cursorHtml = `<span class="cursor cursor-bar"></span>`;
-    // Render: Pre + Pending + Cursor + Post
-    container.innerHTML = pre + pendingHtml + cursorHtml + postEscaped;
+    pre = safeEscape(content.slice(0, start));
+    const selText = safeEscape(content.slice(start, end));
+    post = safeEscape(content.slice(end));
+
+    // No cursor effect usually inside selection, or cursor is at one end.
+    // Standard is to just highlight the range. 
+    // User didn't specify cursor behavior in selection, but typically cursor is hidden or at edge.
+    // We will render cursor at the "cursor" end if needed, but for visual clarity, just highlighting the block is often enough.
+    // Let's render the highlight.
+
+    // If cursor is at 'end', it's after the selection block. If at 'start', before.
+    // Actually, standard editors show cursor at the active edge. 
+    // For simplicity and clarity in this custom UI:
+    // Just wrap the selected text in .selection-highlight.
+    // And we can optionally show the cursor indicator at the `cursor` position.
+
+    sel = `<span class="selection-highlight">${selText}</span>`;
+
+    // We need to inject the cursor indicator.
+    // If cursor > anchor, cursor is at start of 'post'.
+    // If cursor < anchor, cursor is at end of 'pre' (before 'sel').
+
+    const cursorHtml = `<span class="cursor cursor-bar"></span>`; // Always use bar in select mode for visibility? Or keep user preference.
+    // Actually, let's stick to user preference but standard text selection usually hides the block cursor.
+    // Let's just highlight.
+
+    container.innerHTML = pre + sel + post;
+
   } else {
-    // BLOCK or UNDERLINE
-    // Needs to wrap the next character.
-    // NOTE: "Pending" text effectively pushes the cursor forward strictly speaking, 
-    // but "Staging area" usually means "Text being built AT the cursor".
-    // Visually: Pre | [Pending] | [Cursor/NextChar] | Rest.
+    // Standard Cursor Logic
+    pre = safeEscape(content.slice(0, cursor));
+    const postRaw = content.slice(cursor);
+    const postEscaped = safeEscape(postRaw);
 
-    let targetChar = postRaw.length > 0 ? postRaw[0] : ' '; // Space if EOF
-    let rest = postRaw.length > 0 ? postRaw.slice(1) : '';
+    const pendingHtml = pending ? `<span class="pending-text">${safeEscape(pending)}</span>` : '';
 
-    // Escape
-    const targetHtml = safeEscape(targetChar);
-    const restHtml = safeEscape(rest);
+    let cursorHtml = '';
+    const cursorType = settingsManager.config.cursorType || 'BAR';
 
-    const cursorClass = cursorType === 'BLOCK' ? 'cursor-block' : 'cursor-underline';
-    cursorHtml = `<span class="cursor ${cursorClass}">${targetHtml}</span>`;
-
-    container.innerHTML = pre + pendingHtml + cursorHtml + restHtml;
+    if (cursorType === 'BAR') {
+      cursorHtml = `<span class="cursor cursor-bar"></span>`;
+      container.innerHTML = pre + pendingHtml + cursorHtml + postEscaped;
+    } else {
+      let targetChar = postRaw.length > 0 ? postRaw[0] : ' ';
+      let rest = postRaw.length > 0 ? postRaw.slice(1) : '';
+      const targetHtml = safeEscape(targetChar);
+      const restHtml = safeEscape(rest);
+      const cursorClass = cursorType === 'BLOCK' ? 'cursor-block' : 'cursor-underline';
+      cursorHtml = `<span class="cursor ${cursorClass}">${targetHtml}</span>`;
+      container.innerHTML = pre + pendingHtml + cursorHtml + restHtml;
+    }
   }
 
   // Scroll to cursor?

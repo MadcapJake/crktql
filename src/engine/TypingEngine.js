@@ -298,7 +298,7 @@ export class TypingEngine {
         if (pressed('rb')) {
             if (holdingModifier) {
                 // Stub: Y + RB
-                console.log("Modifier + RB (Stub)");
+                // Handled in main.js
             } else {
                 this.typeCharacter('\t');
             }
