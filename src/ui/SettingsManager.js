@@ -1,7 +1,9 @@
-export class SettingsManager {
+import { SubMenu } from './SubMenu.js';
+
+export class SettingsManager extends SubMenu {
     constructor() {
-        this.isOpen = false;
-        this.selectedIndex = 0;
+        super('settings-modal', 'Settings');
+
         this.config = {
             visualizer: true,
             debug: true,
@@ -21,118 +23,83 @@ export class SettingsManager {
             { key: 'done', label: 'Done', type: 'action', className: 'done-btn' }
         ];
 
-        this.onUpdate = null;
-        this.onAction = null;
-        this.lastDpad = { up: false, down: false, left: false, right: false };
-        this.openTime = 0;
+        this.onUpdateCallback = null;
     }
 
-    toggle() {
-        this.isOpen = !this.isOpen;
-        if (this.isOpen) {
-            this.openTime = Date.now();
-        }
-        this.render();
-        return this.isOpen;
-    }
+    // Setter for onUpdate
+    set onUpdate(cb) { this.onUpdateCallback = cb; }
+    get onUpdate() { return this.onUpdateCallback; }
 
-    handleInput(input) {
-        if (!this.isOpen || !input) return;
-
-        // Input Cooldown to prevent accidental triggering on open
-        if (Date.now() - this.openTime < 500) {
+    onConfirm(option) {
+        if (option.key === 'done') {
+            this.close();
             return;
         }
+        if (option.type === 'action') return; // Generic action?
 
-        const dpad = input.buttons.dpad;
-        const pressed = (btn) => dpad[btn] && !this.lastDpad[btn];
+        this.toggleOption(option);
+    }
 
-        if (pressed('up')) {
-            this.selectedIndex = (this.selectedIndex - 1 + this.options.length) % this.options.length;
-            this.render();
-        }
-        if (pressed('down')) {
-            this.selectedIndex = (this.selectedIndex + 1) % this.options.length;
-            this.render();
-        }
+    onLeft(option) {
+        if (option.type === 'range') this.adjustRange(option, -1);
+        if (option.type === 'select') this.adjustSelect(option, -1);
+    }
 
-        const confirm = (input.buttons.south && !this.lastButtons?.south) || (input.buttons.east && !this.lastButtons?.east);
-
-        if (confirm) {
-            this.toggleOption(this.options[this.selectedIndex]);
-        }
-
-        this.lastDpad = { ...dpad };
-        this.lastButtons = { south: input.buttons.south, east: input.buttons.east };
+    onRight(option) {
+        if (option.type === 'range') this.adjustRange(option, 1);
+        if (option.type === 'select') this.adjustSelect(option, 1);
     }
 
     toggleOption(option) {
-        if (option.key === 'done') {
-            this.toggle();
-            return;
-        }
-
-        if (option.type === 'action') {
-            if (this.onAction) this.onAction(option.key);
-            return;
-        }
-
         if (option.type === 'toggle') {
             this.config[option.key] = !this.config[option.key];
-        } else if (option.type === 'range') {
-            let val = this.config[option.key] + option.step;
-            if (val > option.max) val = option.min;
-            this.config[option.key] = parseFloat(val.toFixed(1));
-        } else if (option.type === 'select') {
-            const currIdx = option.values.indexOf(this.config[option.key]);
-            const nextIdx = (currIdx + 1) % option.values.length;
-            this.config[option.key] = option.values[nextIdx];
+            this.render();
+            if (this.onUpdateCallback) this.onUpdateCallback(this.config);
+        } else if (option.type === 'select' || option.type === 'range') {
+            // Tapping A on select/range circles forward
+            this.onRight(option);
         }
-
-        this.render();
-        if (this.onUpdate) this.onUpdate(this.config);
     }
 
-    render() {
-        const modal = document.getElementById('settings-modal');
-        const list = document.getElementById('settings-list');
+    adjustRange(option, dir) {
+        let val = this.config[option.key] + (option.step * dir);
+        if (val > option.max) val = option.max;
+        if (val < option.min) val = option.min;
+        this.config[option.key] = parseFloat(val.toFixed(1));
+        this.render();
+        if (this.onUpdateCallback) this.onUpdateCallback(this.config);
+    }
 
-        if (!this.isOpen) {
-            modal.style.display = 'none';
-            return;
+    adjustSelect(option, dir) {
+        const currIdx = option.values.indexOf(this.config[option.key]);
+        const nextIdx = (currIdx + dir + option.values.length) % option.values.length;
+        this.config[option.key] = option.values[nextIdx];
+        this.render();
+        if (this.onUpdateCallback) this.onUpdateCallback(this.config);
+    }
+
+    renderItemContent(opt) {
+        if (opt.key === 'done') {
+            return `<span style="width:100%; text-align:center;">Done</span>`;
         }
 
-        modal.style.display = 'flex';
-        list.innerHTML = '';
+        let valueDisplay = '';
+        const val = this.config[opt.key];
 
-        this.options.forEach((opt, index) => {
-            const item = document.createElement('div');
-            item.className = `settings-item ${index === this.selectedIndex ? 'selected' : ''} ${opt.className || ''}`;
+        if (opt.type === 'toggle') {
+            valueDisplay = val ? '<i class="fa-solid fa-toggle-on" style="color:var(--color-accent)"></i>' : '<i class="fa-solid fa-toggle-off" style="color:#666"></i>';
+        } else if (opt.type === 'select') {
+            valueDisplay = `<span class="settings-value">${val}</span>`;
+        } else if (opt.type === 'range') {
+            // Visualize range?
+            const pct = ((val - opt.min) / (opt.max - opt.min)) * 100;
+            valueDisplay = `<span class="settings-value">${val}</span> <div style="display:inline-block; width:50px; height:4px; background:#333; margin-left:10px; vertical-align:middle; position:relative;"><div style="position:absolute; left:0; top:0; height:100%; background:var(--color-accent); width:${pct}%"></div></div>`;
+        }
 
-            let valueDisplay = '';
-            if (opt.key === 'done') {
-                item.innerHTML = `<span style="width:100%; text-align:center;">Done</span>`;
-            } else {
-                if (opt.type === 'action') {
-                    valueDisplay = '➜';
-                } else {
-                    valueDisplay = this.config[opt.key];
-                    if (typeof valueDisplay === 'boolean') valueDisplay = valueDisplay ? 'ON' : 'OFF';
-                }
-
-                item.innerHTML = `
-                    <span class="settings-label">${opt.label}</span>
-                    <span class="settings-value">${valueDisplay}</span>
-                `;
-            }
-
-            // Mouse Interaction
-            item.addEventListener('click', () => {
-                this.selectedIndex = index;
-                this.toggleOption(opt);
-            });
-
-            list.appendChild(item);
-        });
+        return `
+            <span class="settings-label">${opt.label}</span>
+            <span style="flex:1;"></span>
+            ${valueDisplay}
+        `;
     }
 }
