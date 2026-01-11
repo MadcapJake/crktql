@@ -183,7 +183,7 @@ function updateStatusText(mode) {
     if (modeIcon) modeIcon.innerHTML = '<i class="fa-solid fa-eye"></i>';
     if (caseIcon) caseIcon.style.display = 'none';
   } else if (mode === 'EDITOR') {
-    if (modeIcon) modeIcon.innerHTML = '<i class="fa-solid fa-circle-half-stroke"></i>';
+    if (modeIcon) modeIcon.innerHTML = '<i class="fa-solid fa-border-none"></i>';
     if (caseIcon) caseIcon.style.display = 'flex';
   } else {
     if (caseIcon) caseIcon.style.display = 'flex'; // Default show
