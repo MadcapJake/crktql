@@ -118,6 +118,7 @@ const visualizer = new Visualizer('visualizer-container');
 // Editor State
 let editorLastDpad = { up: false, down: false, left: false, right: false };
 let lastEngineTextLength = 0;
+let selectionAnchor = null;
 
 const bookManager = new BookManager();
 const focusManager = new FocusManager();
@@ -667,7 +668,7 @@ gamepadManager.on('frame', (gamepad) => {
         console.log("Trigger Success! Switching to VISUAL_SELECT");
         showNotification("Visual Select Mode Entered");
 
-        part.selectionAnchor = cursor; // Start Selection
+        selectionAnchor = cursor; // Global anchor
         focusManager.setMode('VISUAL_SELECT');
         gamepadManager.lastButtons = { ...frameInput.buttons };
         return; // Exit frame to prevent RB from typing TAB
@@ -909,15 +910,16 @@ gamepadManager.on('frame', (gamepad) => {
 
   // Helper Functions for Visual Select
   function getSelectionText(part) {
-    if (!part || part.selectionAnchor === undefined) return "";
-    const start = Math.min(part.selectionAnchor, part.cursor);
-    const end = Math.max(part.selectionAnchor, part.cursor);
+    if (!part || selectionAnchor === null) return "";
+    const start = Math.min(selectionAnchor, part.cursor);
+    const end = Math.max(selectionAnchor, part.cursor);
     return part.content.slice(start, end);
   }
 
   function deleteSelection(part) {
-    const start = Math.min(part.selectionAnchor, part.cursor);
-    const end = Math.max(part.selectionAnchor, part.cursor);
+    if (selectionAnchor === null) return;
+    const start = Math.min(selectionAnchor, part.cursor);
+    const end = Math.max(selectionAnchor, part.cursor);
     const newContent = part.content.slice(0, start) + part.content.slice(end);
 
     bookManager.setCurrentPartContent(newContent);
@@ -929,9 +931,8 @@ gamepadManager.on('frame', (gamepad) => {
 
   function exitVisualSelect() {
     const part = bookManager.getCurrentPart();
+    selectionAnchor = null; // Clear global
     if (part) {
-      part.selectionAnchor = null; // Clear anchor
-      // Keep cursor where it is (or where it ended up)
       renderCustomEditor(part);
     }
     focusManager.setMode('EDITOR');
@@ -975,7 +976,7 @@ async function handlePaste() {
 }
 
 
-function renderCustomEditor(part) {
+function renderCustomEditor(part, currentAnchor = selectionAnchor) {
   const container = document.getElementById('editor-view');
   if (!container || !part) return;
 
@@ -1008,7 +1009,8 @@ function renderCustomEditor(part) {
   };
 
   // Selection Logic
-  const anchor = part.selectionAnchor;
+  // const anchor = part.selectionAnchor; 
+  const anchor = currentAnchor; // Use passed or global anchor
   const isSelectionActive = (anchor !== undefined && anchor !== null && anchor !== cursor);
 
   let pre, sel, post;
