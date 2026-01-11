@@ -229,7 +229,15 @@ export class GridOverview {
 
                 const el = document.createElement('div');
                 el.className = 'grid-part';
+
+                // Cursor Selection (Grid Cursor)
                 if (gx === this.cursor.x && gy === this.cursor.y) el.classList.add('selected');
+
+                // Active Part (Where we came from / will return to)
+                const current = this.bookManager.getCurrentPart();
+                if (current && current.x === gx && current.y === gy) {
+                    el.classList.add('active-part');
+                }
 
                 el.style.left = `${px}px`;
                 el.style.top = `${py}px`;

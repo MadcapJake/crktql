@@ -372,6 +372,19 @@ body {
   background: #222;
 }
 
+/* The part currently open in Editor */
+.grid-part.active-part {
+  border-color: #007bff;
+  box-shadow: 0 0 15px rgba(0, 123, 255, 0.6);
+}
+
+.grid-part.selected.active-part {
+  border-color: var(--color-accent);
+  /* Selected overrides border */
+  box-shadow: 0 0 30px rgba(255, 0, 85, 0.4), inset 0 0 15px rgba(0, 123, 255, 0.4);
+  /* Combined glow */
+}
+
 .grid-part-thumb {
   flex: 1;
   width: 100%;
