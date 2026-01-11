@@ -61,20 +61,25 @@ export class InputMapper {
 
         // D-Pad Helper: Checks mapping first, falls back to standard axes 6/7
         const readDpad = (dir) => {
+            let result = false;
+
             // 1. Try Mapped Index
             let mapping = indices.buttons.dpad?.[dir];
             if (mapping !== undefined) {
-                return readInput(mapping);
+                result = readInput(mapping);
             }
 
-            // 2. Fallback (Standard Axes 6/7)
-            const axisH = gamepad.axes[6]; // Left/Right
-            const axisV = gamepad.axes[7]; // Up/Down
-            if (dir === 'left' && axisH < -0.5) return true;
-            if (dir === 'right' && axisH > 0.5) return true;
-            if (dir === 'up' && axisV < -0.5) return true;
-            if (dir === 'down' && axisV > 0.5) return true;
-            return false;
+            // If mapped input found nothing, or no mapping, try Standard Axes 6/7 (Common on Linux/SteamOS)
+            if (!result) {
+                const axisH = gamepad.axes[6]; // Left/Right
+                const axisV = gamepad.axes[7]; // Up/Down
+                if (dir === 'left' && axisH < -0.5) result = true;
+                if (dir === 'right' && axisH > 0.5) result = true;
+                if (dir === 'up' && axisV < -0.5) result = true;
+                if (dir === 'down' && axisV > 0.5) result = true;
+            }
+
+            return result;
         }
 
         const axisValue = (idx) => {
