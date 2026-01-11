@@ -51,9 +51,7 @@ document.querySelector('#app').innerHTML = `
             <div id="gamepad-btn" class="settings-trigger" title="Controller Info"><i class="fa-solid fa-gamepad"></i></div>
             <div id="settings-btn" class="settings-trigger"><i class="fa-solid fa-gear"></i></div>
             <div id="help-btn" class="settings-trigger" title="Help"><i class="fa-solid fa-circle-question"></i></div>
-            <div id="new-book-btn" class="settings-trigger" title="New Book"><i class="fa-solid fa-book-medical"></i></div>
-            <div id="save-book-btn" class="settings-trigger" title="Save Book"><i class="fa-regular fa-floppy-disk"></i></div>
-            <div id="open-book-btn" class="settings-trigger" title="Open Book"><i class="fa-solid fa-book-open"></i></div>
+            <div id="book-menu-btn" class="settings-trigger" title="Book Menu"><i class="fa-solid fa-book"></i></div>
         </div>
         <div id="notification-area"></div>
     </div>
@@ -146,6 +144,9 @@ const bookManager = new BookManager();
 const focusManager = new FocusManager();
 import { HelpManager } from './ui/HelpManager.js';
 const helpManager = new HelpManager(focusManager);
+import { BookMenu } from './ui/BookMenu.js';
+const bookMenu = new BookMenu();
+
 const navBar = new NavigationBar('bottom-bar');
 const gridOverview = new GridOverview('grid-overview', bookManager);
 
@@ -325,70 +326,67 @@ window.addEventListener('request-help-toggle', (e) => {
   helpManager.toggle(e.detail.input);
 });
 
-document.getElementById('new-book-btn')?.addEventListener('click', () => {
-  // New Book
-  showConfirmModal('Create new book? Unsaved changes will be lost.', () => {
-    bookManager.loadBook({}, "untitled.htz");
-    bookManager.createPart(0, 0); // Ensure default part
-    focusManager.setMode('EDITOR'); // Will change mode back from DIALOG_CONFIRM
-    gridOverview.render();
-    showNotification('New Book Created');
-  });
+document.getElementById('book-menu-btn')?.addEventListener('click', () => {
+  bookMenu.toggle();
+  if (bookMenu.isOpen) focusManager.setMode('BOOK_MENU');
 });
 
-document.getElementById('open-book-btn')?.addEventListener('click', () => {
-  // Open Book File Dialog
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = '.htz,.json';
-  input.onchange = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+window.addEventListener('request-book-menu-toggle', (e) => {
+  if (bookMenu.toggle(e.detail.input)) {
+    focusManager.setMode('BOOK_MENU');
+  }
+});
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        bookManager.loadBook(e.target.result, file.name);
-        focusManager.setMode('EDITOR'); // Or Overview?
+// Book Menu Actions
+bookMenu.onAction = (action) => {
+  if (action === 'new') {
+    showConfirmModal('Create new book? Unsaved changes will be lost.', () => {
+      bookManager.loadBook({}, "untitled.htz");
+      bookManager.createPart(0, 0);
+      focusManager.setMode('EDITOR');
+      gridOverview.render();
+      showNotification('New Book Created');
+    });
+  } else if (action === 'save') {
+    const content = bookManager.exportBook();
+    const filename = bookManager.filename || "my_book.htz";
 
-        // If the book has parts, load the first one?
-        // BookManager handles default currentPart logic.
-        const part = bookManager.getCurrentPart();
-        if (part) {
-          typingEngine.reset(part.content);
-        } else {
-          // Should technically have one from loadBook's default logic
-          typingEngine.reset("");
+    const blob = new Blob([content], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    showNotification('Book Saved to Downloads');
+  } else if (action === 'open') {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.htz,.json';
+    input.onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const data = JSON.parse(e.target.result);
+          bookManager.loadBook(data, file.name || "imported.htz");
+          focusManager.setMode('EDITOR');
+          gridOverview.render();
+          showNotification(`Loaded ${file.name}`);
+        } catch (err) {
+          console.error(err);
+          showNotification("Failed to load book");
         }
-        gridOverview.render();
-
-      } catch (err) {
-        showNotification("Failed to load book: " + err.message);
-      }
+      };
+      reader.readAsText(file);
     };
-    reader.readAsText(file);
-  };
-  input.click();
-});
-
-document.getElementById('save-book-btn')?.addEventListener('click', () => {
-  // Save Book Logic
-  const content = bookManager.exportBook();
-  const filename = bookManager.filename || "my_book.htz";
-
-  // Create Blob and Link
-  const blob = new Blob([content], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-
-  showNotification(`Book saved as ${filename}`);
-});
+    input.click();
+  }
+};
 
 const gearBtn = document.getElementById('settings-btn');
 if (gearBtn) {
@@ -604,8 +602,8 @@ gamepadManager.on('frame', (gamepad) => {
     return;
   }
 
-  // Start -> Toggle Bottom Bar (Only if not in Dialog)
-  if (focusManager.mode !== 'DIALOG' && startPressed && !gamepadManager.lastStart) {
+  // Start -> Toggle Bottom Bar (Only if not in Dialog or Book Menu)
+  if (focusManager.mode !== 'DIALOG' && focusManager.mode !== 'BOOK_MENU' && startPressed && !gamepadManager.lastStart) {
     focusManager.toggleBottomBar();
   }
 
@@ -625,6 +623,13 @@ gamepadManager.on('frame', (gamepad) => {
   switch (focusManager.mode) {
     case 'HELP':
       helpManager.handleInput(frameInput);
+      break;
+
+    case 'BOOK_MENU':
+      bookMenu.handleInput(frameInput);
+      if (!bookMenu.isOpen) {
+        focusManager.setMode('EDITOR'); // Return to Text Buffer
+      }
       break;
 
     case 'OVERVIEW':

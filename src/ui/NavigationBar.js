@@ -11,9 +11,7 @@ export class NavigationBar {
             'gamepad-btn',
             'settings-btn',
             'help-btn',
-            'new-book-btn',
-            'save-book-btn',
-            'open-book-btn'
+            'book-menu-btn'
         ];
 
         this.selectedIndex = 0;
@@ -83,6 +81,8 @@ export class NavigationBar {
                 // Let's emit a global event that main.js listens to instead of click?
                 // OR: dispatch 'request-help-toggle'
                 window.dispatchEvent(new CustomEvent('request-help-toggle', { detail: { input } }));
+            } else if (id === 'book-menu-btn') {
+                window.dispatchEvent(new CustomEvent('request-book-menu-toggle', { detail: { input } }));
             } else {
                 el.click();
             }
