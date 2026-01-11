@@ -181,24 +181,36 @@ body {
 
 /* Custom Editor */
 .editor-container {
-  width: 60%;
-  margin-bottom: 20px;
+  width: 100%;
+  max-width: 100%;
+  /* User requested full width */
+  margin-bottom: 0;
+  flex: 1;
+  /* Fill remaining vertical space */
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  /* Let custom-editor handle scroll */
 }
 
 .custom-editor {
   width: 100%;
-  height: 400px;
-  /* Match previous textarea height */
+  height: 100%;
   padding: 2rem;
+  /* Add padding to prevent text being hidden by visualizers */
+  padding-bottom: 300px;
+  /* Space for bottom visualizers */
+  padding-top: 100px;
+  /* Space for potential top visualizers */
+
   font-size: 1.5rem;
   line-height: normal;
-  /* Important for block cursor alignment */
   border: none;
   background: transparent;
-  color: var(--text-color);
+  color: var(--color-text);
   outline: none;
   white-space: pre-wrap;
-  /* Preserve whitespace */
   overflow-y: auto;
   font-family: 'Courier New', Courier, monospace;
   position: relative;
@@ -370,7 +382,8 @@ body {
   width: 100%;
   gap: 4rem;
   transition: all 0.5s ease;
-  z-index: 20;
+  z-index: 100;
+  /* Ensure it stays on top of editor text */
 }
 
 /* Placement Modes */
@@ -404,10 +417,17 @@ body {
   width: 200px;
   height: 200px;
   border-radius: 50%;
-  background: radial-gradient(circle at center, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.01) 70%);
-  border: 2px solid rgba(255, 255, 255, 0.1);
+  background: radial-gradient(circle at center, rgba(30, 30, 36, 0.95) 0%, rgba(30, 30, 36, 0.9) 70%);
+  /* Solid, dark background */
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  /* Brighter border */
   position: relative;
-  box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
+  /* Deep shadow */
+  z-index: 101;
+  backdrop-filter: blur(10px);
+  /* Blur anything behind it */
+  -webkit-backdrop-filter: blur(10px);
 }
 
 .stick-point {
@@ -420,9 +440,10 @@ body {
   left: 50%;
   margin-top: -10px;
   margin-left: -10px;
-  z-index: 10;
+  z-index: 110;
+  /* Stick on top */
   transition: transform 0.05s linear;
-  box-shadow: 0 0 10px var(--color-primary);
+  box-shadow: 0 0 15px var(--color-primary);
 }
 
 
@@ -434,6 +455,8 @@ body {
   top: 0;
   left: 0;
   pointer-events: none;
+  z-index: 105;
+  /* Segments between background and stick */
 }
 
 .segment {
@@ -447,8 +470,13 @@ body {
   position: absolute;
   font-size: 1.2rem;
   font-weight: bold;
-  color: rgba(255, 255, 255, 0.3);
+  color: rgba(255, 255, 255, 0.9);
+  /* High opacity */
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+  /* Shadow for legibility */
   transition: all 0.2s ease;
+  z-index: 106;
+  /* Labels clearly above background */
 }
 
 /* Positioning 8 sectors labels */
