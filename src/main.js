@@ -586,6 +586,10 @@ gamepadManager.on('frame', (gamepad) => {
 
       break;
 
+    case 'BOTTOM_BAR':
+      navBar.handleInput(frameInput);
+      break;
+
 
     case 'RENAMING':
       const rState = focusManager.renameState;

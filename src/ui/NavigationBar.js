@@ -18,7 +18,7 @@ export class NavigationBar {
         this.selectedIndex = 0;
         this.isActive = false;
 
-        this.lastDpad = { left: false, right: false };
+        this.lastNav = { left: false, right: false };
         this.lastAction = false; // A button
     }
 
@@ -42,12 +42,15 @@ export class NavigationBar {
 
         const dpad = input.buttons.dpad;
 
-        // Navigation
-        if (dpad.right && !this.lastDpad.right) {
+        // Navigation: D-Pad OR Shoulder Buttons
+        const leftInput = dpad.left || input.buttons.lb;
+        const rightInput = dpad.right || input.buttons.rb;
+
+        if (rightInput && !this.lastNav.right) {
             this.selectedIndex = (this.selectedIndex + 1) % this.items.length;
             this.render();
         }
-        if (dpad.left && !this.lastDpad.left) {
+        if (leftInput && !this.lastNav.left) {
             this.selectedIndex = (this.selectedIndex - 1 + this.items.length) % this.items.length;
             this.render();
         }
@@ -58,7 +61,7 @@ export class NavigationBar {
             this.triggerAction(this.items[this.selectedIndex]);
         }
 
-        this.lastDpad = { ...dpad };
+        this.lastNav = { left: leftInput, right: rightInput };
         this.lastAction = actionPressed;
     }
 
