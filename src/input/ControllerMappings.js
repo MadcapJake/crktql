@@ -54,6 +54,12 @@ export class ControllerMappings {
             if (this.mappings[key]) return this.mappings[key];
         }
 
+        // Fallback to generic user-custom if exists
+        // This handles cases where regex fails (e.g. "XInput Controller") but user calibrated
+        if (this.mappings['user-custom']) {
+            return this.mappings['user-custom'];
+        }
+
         return null; // No custom mapping found
     }
 
