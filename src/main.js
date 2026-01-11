@@ -197,8 +197,9 @@ function updateStatusText(mode) {
     html = `
             <span class="notification-persistent">
                 <i class="fa-solid fa-arrows-up-down-left-right icon-blue"></i> Pan&emsp;
-                <i class="fa-solid fa-y icon-yellow"></i> Rename Part&emsp;
-                <i class="fa-solid fa-y icon-yellow"></i><i class="fa-solid fa-plus"></i> <i class="fa-solid fa-arrows-up-down-left-right icon-blue"></i> Jump
+                <i class="fa-solid fa-y icon-yellow"></i><i class="fa-solid fa-plus"></i> <i class="fa-solid fa-arrows-up-down-left-right icon-blue"></i> Jump&emsp;
+                <i class="fa-solid fa-x icon-blue"></i> <strong>Hold 3s:</strong> Delete&emsp;
+                <i class="fa-solid fa-y icon-yellow"></i> Rename
             </span>
         `;
   } else if (mode === 'RENAMING') {
