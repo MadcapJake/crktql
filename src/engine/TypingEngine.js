@@ -387,4 +387,12 @@ export class TypingEngine {
         this.state.mode = 'ONSET';
         this.state.caseMode = 0;
     }
+
+    // Force sync input state (e.g. after mode switch) to prevent stale triggers
+    resetInputState(gamepad) {
+        const input = this.mapper.map(gamepad);
+        if (input) {
+            this.state.lastInput = input;
+        }
+    }
 }

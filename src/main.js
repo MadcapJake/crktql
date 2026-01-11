@@ -953,6 +953,12 @@ gamepadManager.on('frame', (gamepad) => {
     if (part) {
       renderCustomEditor(part);
     }
+
+    // Sync Engine Input to prevent "A" or "B" from triggering typing actions immediately
+    if (typeof gamepad !== 'undefined') {
+      typingEngine.resetInputState(gamepad);
+    }
+
     focusManager.setMode('EDITOR');
   }
 
