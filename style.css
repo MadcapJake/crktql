@@ -311,70 +311,105 @@ body {
   line-height: 1.5;
 }
 
-/* Grid Overview */
+/* Grid Overview - Infinite 3D World */
 #grid-overview {
   display: none;
   position: absolute;
   top: 0;
   left: 0;
-  width: 100%;
-  height: 100%;
-  /* Minus bottom bar? handled by flex or overlap using container padding? */
-  /* Wait, container is flex. If we hide editor, grid takes space. */
-  background: radial-gradient(circle, #1a1a1a 1px, transparent 1px) 0 0 / 40px 40px;
-  background-color: #0f0f13;
+  width: 100vw;
+  height: 100vh;
+  background: #0f0f13;
   z-index: 10;
   overflow: hidden;
-  /* We implement our own offset */
+  perspective: 1000px;
+  /* Optional depth feel */
+}
+
+#grid-camera {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  /* Camera transform applied via JS: scale(zoom) */
+  transform-style: preserve-3d;
+  transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+#grid-world {
+  position: absolute;
+  top: 0;
+  left: 0;
+  /* World transform applied via JS: translate(-x, -y) */
+  transform-style: preserve-3d;
+  transition: transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  /* Smooth pan */
+  will-change: transform;
 }
 
 .grid-part {
   position: absolute;
-  width: 140px;
-  height: 180px;
-  background: #222;
+  width: 200px;
+  height: 250px;
+  background: #1a1a20;
   border: 2px solid #333;
-  border-radius: 8px;
+  border-radius: 12px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 10px;
-  transition: transform 0.2s, border-color 0.2s;
+  padding: 15px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  /* Position set via inline styles */
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
 }
 
 .grid-part.selected {
   border-color: var(--color-accent);
-  transform: scale(1.05);
-  box-shadow: 0 0 20px rgba(255, 0, 85, 0.3);
+  box-shadow: 0 0 30px rgba(255, 0, 85, 0.4);
   z-index: 5;
+  background: #222;
 }
 
 .grid-part-thumb {
   flex: 1;
   width: 100%;
-  background: #111;
-  margin-bottom: 8px;
-  border-radius: 4px;
+  background: #000;
+  margin-bottom: 10px;
+  border-radius: 6px;
   overflow: hidden;
   color: #666;
-  font-size: 8px;
-  padding: 4px;
+  font-size: 10px;
+  padding: 8px;
   font-family: monospace;
   white-space: pre-wrap;
+  border: 1px solid #333;
 }
 
 .grid-part-name {
-  font-size: 0.9rem;
+  font-size: 1rem;
   font-weight: bold;
-  color: #ccc;
+  color: #eee;
   text-align: center;
 }
 
 .grid-empty-slot {
-  /* Maybe just outline? */
-  border: 2px dashed #333;
+  border: 2px dashed #444;
   background: transparent;
+  color: #444;
+}
+
+.grid-info-overlay {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  z-index: 100;
+  background: rgba(0, 0, 0, 0.5);
+  padding: 5px 10px;
+  border-radius: 4px;
+  font-family: monospace;
+  pointer-events: none;
 }
 
 /* Visualizer Styles */

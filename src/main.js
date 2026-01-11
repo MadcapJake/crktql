@@ -196,9 +196,10 @@ function updateStatusText(mode) {
   if (mode === 'OVERVIEW') {
     html = `
             <span class="notification-persistent">
-                <i class="fa-solid fa-x icon-blue"></i> Hold 3s: Delete Part&emsp;
-                <i class="fa-solid fa-y icon-yellow"></i> Rename Part&emsp;
-                <i class="fa-solid fa-a icon-green"></i> Open Part
+                <i class="fa-solid fa-arrows-up-down-left-right icon-blue"></i> Pan&emsp;
+                <i class="fa-solid fa-magnifying-glass-plus icon-green"></i> LB Zoom In&emsp;
+                <i class="fa-solid fa-magnifying-glass-minus icon-red"></i> RB Zoom Out&emsp;
+                <i class="fa-solid fa-y icon-yellow"></i> + Dir: Jump
             </span>
         `;
   } else if (mode === 'RENAMING') {
@@ -520,7 +521,31 @@ gamepadManager.on('frame', (gamepad) => {
 
   // 5. Route Input based on Focus
   switch (focusManager.mode) {
+    case 'OVERVIEW':
+      // Route all input to GridOverview
+      gridOverview.handleInput(frameInput);
+
+      // Update Debug Info
+      updateDebugUI(frameInput, gamepad, null);
+      break;
+
     case 'EDITOR':
+      // Switch to Overview: Right Shoulder (Zoom Out)
+      // Check for simple press
+      if (frameInput.buttons.rb && !gamepadManager.lastButtons.rb) {
+        // If NOT in Visual Select? Visual Select uses Y+RB.
+        // This check is simple button press.
+        // But wait, Y+RB check triggers Visual Select.
+        // If we press only RB -> Zoom Out?
+        // If we are holding Y, we enter Visual Select.
+        // So check !isModifierHeld.
+        if (!frameInput.buttons.north) {
+          focusManager.setMode('OVERVIEW');
+          updateStatusText('OVERVIEW');
+          return; // Skip rest
+        }
+      }
+
       // D-Pad Cursor Movement (One press per frame or throttled? Let's use simple press check for now)
       // Actually per-frame pressed check is too fast. Need simple one-shot or repeat.
       // GamepadManager doesn't give "just pressed" for D-pad easily without tracking lastDpad relative to this specific loop?
