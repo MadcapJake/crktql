@@ -584,8 +584,6 @@ gamepadManager.on('frame', (gamepad) => {
       // Route all input to GridOverview
       gridOverview.handleInput(frameInput);
 
-      // Update Debug Info
-      updateDebugUI(frameInput, gamepad, null);
       break;
 
 
@@ -1248,8 +1246,6 @@ gamepadManager.on('frame', (gamepad) => {
   gamepadManager.lastStart = startPressed;
   gamepadManager.lastSelect = selectPressed;
 
-  // Debug UI always updates if visible
-  updateDebugUI(frameInput, gamepad, null);
   updateIndicators();
 });
 
@@ -1428,27 +1424,19 @@ function updateIndicators() {
     cInd.innerHTML = icon;
   }
 }
+// --- DEBUG OVERLAY ---
+import { InputDebugOverlay } from './ui/InputDebugOverlay.js';
+const debugOverlay = new InputDebugOverlay(gamepadManager, typingEngine.mapper);
 
-function updateDebugUI(frameInput, gamepad, state) {
-  const dStatus = document.getElementById('debug-status');
-  if (!dStatus || dStatus.style.display === 'none') return;
+// Sync with Settings
+debugOverlay.visible = settingsManager.config.debug;
+if (debugOverlay.visible) debugOverlay.element.style.display = 'block';
+else debugOverlay.element.style.display = 'none';
 
-  if (frameInput) {
-    const rawAxes = gamepad.axes.map((a, i) => `${i}:${a.toFixed(2)}`).join(' ');
-    const activeButtons = gamepad.buttons
-      .map((b, i) => b.pressed ? i : null)
-      .filter(i => i !== null)
-      .join(', ');
-
-    dStatus.innerHTML = `
-              Buttons: [${activeButtons}] <br>
-              Raw Axes: ${rawAxes} <br>
-              LT: ${frameInput.mode.raw.lt.toFixed(2)} | RT: ${frameInput.mode.raw.rt.toFixed(2)} <br>
-              L-Stick: ${frameInput.sticks.left.active ? frameInput.sticks.left.sector : 'Center'} (${Math.round(frameInput.sticks.left.angle)}°)<br>
-              R-Stick: ${frameInput.sticks.right.active ? frameInput.sticks.right.sector : 'Center'} (${Math.round(frameInput.sticks.right.angle)}°)
-          `;
-  }
-}
+settingsManager.onUpdate = (config) => {
+  debugOverlay.visible = config.debug;
+  debugOverlay.element.style.display = config.debug ? 'block' : 'none';
+};
 
 // --- Robust Export Logic ---
 const exportBtn = document.getElementById('export-logs-btn');

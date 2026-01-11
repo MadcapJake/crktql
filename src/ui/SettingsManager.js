@@ -4,7 +4,7 @@ export class SettingsManager {
         this.selectedIndex = 0;
         this.config = {
             visualizer: true,
-            debug: false,
+            debug: true,
             deadzone: 0.5,
             onsetConflict: 'COMMIT',
             visualizerPlacement: 'BOTTOM_CENTER',
