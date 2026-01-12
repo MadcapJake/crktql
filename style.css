@@ -1019,7 +1019,8 @@ body {
 .icon-yellow,
 .icon-green,
 .icon-red,
-.icon-grey {
+.icon-grey,
+.icon-purple {
   width: 24px;
   height: 24px;
   display: inline-flex;
@@ -1052,6 +1053,10 @@ body {
 
 .icon-grey {
   background-color: #a0a0a0;
+}
+
+.icon-purple {
+  background-color: darkviolet;
 }
 
 @keyframes shake {

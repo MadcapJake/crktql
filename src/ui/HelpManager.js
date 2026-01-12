@@ -7,64 +7,93 @@ export class HelpManager {
         // Define Slides
         this.slides = [
             {
-                title: "Welcome to Crktqla",
+                title: "Welcome to yôn Cuktelo",
                 text: `
-                    <p>Crktqla is a grid-based collaborative writing environment designed for gamified workflows.</p>
+                    <p>yôn Cuktelo is a grid-based writing environment designed for writing Hîsyêô without a keyboard.</p>
                     <p>Use the <strong>Overview Mode</strong> to navigate the infinite grid of 'parts'.</p>
                     <p>Use the <strong>Editor Mode</strong> to write content within a part.</p>
+                    <p>Press <strong>Start</strong> to focus on the gutter menu.</p>
                 `
             },
             {
-                title: "Navigation (Overview)",
+                title: "Book Overview",
                 text: `
                     <h3>Moving Around</h3>
-                    <p>Use the <strong>D-Pad</strong> to move the cursor one cell at a time.</p>
-                    <p>Hold <strong>Y (North)</strong> + <strong>D-Pad</strong> to jump to the edge of the visible screen.</p>
+                    <p>Press <strong>Select</strong> to open the Book Overview.</p>
+                    <p>Use the <i class="fa-solid fa-arrows-up-down-left-right icon-purple"></i> to move the cursor one cell at a time.</p>
+                    <p>Hold <i class="fa-solid fa-y icon-yellow"></i> + <i class="fa-solid fa-arrows-up-down-left-right icon-purple"></i> to jump to the edge of the visible screen.</p>
+                    <p>Press <i class="fa-solid fa-a icon-green"></i> to open a part in Editor Mode.</p>
+                    <p>Press <strong>Select</strong> again to return to the part editor where you were.</p>
                     
                     <h3>Zooming</h3>
-                    <p>Use <strong>LB</strong> to Zoom In (Enter Editor).</p>
-                    <p>Use <strong>RB</strong> to Zoom Out (Return to Overview).</p>
+                    <p>Use <strong>LB</strong> to zoom in and see less of the grid.</p>
+                    <p>Use <strong>RB</strong> to zoom out and see more of the grid.</p>
                 `
             },
             {
-                title: "Editing Text",
+                title: "Part Editing",
                 text: `
-                    <h3>Dual-Stick Typing</h3>
-                    <p><strong>Left Stick</strong>: Selects the consonant/sector.</p>
-                    <p><strong>Right Stick</strong>: Selects the vowel/character.</p>
-                    <p>Release the right stick to type the character.</p>
+                    <h3>Onset Mode</h3>
+                    <p>The left joystick selects from H, K, T, C, F, S, N, L.</p>
+                    <p>The right joystick selects from Y, G, D, Z, B, X, M, W.</p>
+                    <p>Release the joystick will place the selected onset and the vowel 'o'.</p>
+
+                    <h3>Rime Mode</h3>
+                    <p>Instead of using the default vowel 'o', you can use Rime Mode to select a different vowel and coda.</p>
+                    <br/>
+                    <p>Hold the <strong>LT</strong> trigger to enter Rime Mode Left.</p>
+                    <p>The left joystick selects a vowel (i, û, u, ô, o, ê, e, î).</p>
+                    <p>The right joystick selects a coda (-k, -t, -c, -n, -l.)</p>
+                    <p>Release the joystick will place the selected rime.</p>
+                    <br/>
+                    <p>Hold the <strong>RT</strong> trigger to enter Rime Mode Right.</p>
+                    <p>The left joystick selects a coda (-k, -t, -c, -n, -l.)</p>
+                    <p>The right joystick selects a vowel (i, û, u, ô, o, ê, e, î).</p>
+                    <p>Release the joystick will place the selected rime.</p>
                     
                     <h3>Shortcuts</h3>
-                    <p><strong>A (South)</strong>: Space</p>
-                    <p><strong>B (East)</strong>: Backspace</p>
-                    <p><strong>X (West)</strong>: Delete Forward</p>
-                    <p><strong>Y (North)</strong>: Shift / Caps Lock (Toggle)</p>
+                    <p><i class="fa-solid fa-a icon-green"></i>: Space</p>
+                    <p><i class="fa-solid fa-b icon-red"></i>: Enter</p>
+                    <p><i class="fa-solid fa-x icon-blue"></i>: Delete Forward</p>
+                    <p><i class="fa-solid fa-y icon-yellow"></i>: Shift/Ctrl Mode</p>
+                    <p><strong>L3/R3</strong>: Shift / Caps Lock (Toggle)</p>
                 `
             },
             {
-                title: "Citations & Links",
+                title: "Part Citations",
                 text: `
-                    <h3>Creating Links</h3>
-                    <p>In Overview, press <strong>B (Red)</strong> to insert a link to your current location.</p>
-                    <p>This creates a <code>{{cite:x,y}}</code> tag.</p>
+                    <h3>Creating Citations</h3>
+                    <p>In Overview, press <i class="fa-solid fa-b icon-red"></i> to insert a citation to your current location.</p>
+                    <p>This creates a <code>{{cite:x,y}}</code> tag. (x,y are the coordinates of the part)</p>
+                    <p>Don't worry about the syntax, it will be automatically generated for you.</p>
                     
-                    <h3>Following Links</h3>
-                    <p>In Editor, hover over a citation.</p>
-                    <p>Hold <strong>Y</strong> and press <strong>B</strong> to follow the link.</p>
+                    <h3>Following Citations</h3>
+                    <p>In Editor, move your cursor to a citation.</p>
+                    <p>Hold <i class="fa-solid fa-y icon-yellow"></i> and press <i class="fa-solid fa-b icon-red"></i> to follow the citation.</p>
                     <p>The camera will fly to the target location.</p>
+
+                    <h3>Changing Citations</h3>
+                    <p>In Editor, move your cursor to a citation.</p>
+                    <p>Hold <i class="fa-solid fa-y icon-yellow"></i> and press <i class="fa-solid fa-b icon-red"></i> to follow the citation.</p>
+                    <p>The camera will fly to the target location.</p>
+                    <p>The previous citation will be highlighted in yellow.
+                    <p>Move your cursor to a new citation and press <i class="fa-solid fa-b icon-red"></i> to change the citation.</p>
+
+                    <h3>Deleting Citations</h3>
+                    <p>Delete the citation just like any other character.</p>
                 `
             },
             {
                 title: "Visual Select Mode",
                 text: `
                     <h3>Selection</h3>
-                    <p>Hold <strong>Y</strong> and press <strong>RB</strong> to enter Visual Select Mode.</p>
-                    <p>Use <strong>D-Pad</strong> to expand selection.</p>
+                    <p>Hold <i class="fa-solid fa-y icon-yellow"></i> and press <strong>RB</strong> to enter Visual Select Mode.</p>
+                    <p>Use <i class="fa-solid fa-arrows-up-down-left-right icon-purple"></i> to expand selection.</p>
                     
                     <h3>Actions</h3>
-                    <p><strong>A (Green)</strong>: Copy</p>
-                    <p><strong>X (Blue)</strong>: Cut / Delete</p>
-                    <p><strong>B (Red)</strong>: Cancel</p>
+                    <p><i class="fa-solid fa-a icon-green"></i>: Copy</p>
+                    <p><i class="fa-solid fa-x icon-blue"></i>: Cut / Delete</p>
+                    <p><i class="fa-solid fa-b icon-red"></i>: Cancel</p>
                 `
             }
         ];
