@@ -591,6 +591,34 @@ window.addEventListener('request-citation-insert', (e) => {
 
     // CRITICAL: Sync TypingEngine so it knows about the inserted tag!
     typingEngine.reset(content);
+
+    // Check if we have the gamepad instance from the event frame? 
+    // We don't have it directly here.
+    // But we can force the NEXT frame to treat inputs as 'held' not 'pressed'.
+    // We can't easily get the 'gamepad' object here though.
+    // Solution: main.js loop handles the update.
+    // If we rely on main loop, we need to ensure main loop knows we just switched.
+    // Or we manually update gamepadManager.lastButtons?
+
+    // Better: If we have a reference to the gamepad manager or current state.
+    // Workaround: TypingEngine.resetInputState needs a gamepad object.
+    // We can access gamepadManager.detect() if implementation allows, or wait for next frame loop.
+
+    // Actually, simply clearing 'lastButtons' in Main Loop isn't enough for TypingEngine's internal 'lastInput'.
+    // We need to tell TypingEngine to ignore the *first* frame of input after reset.
+    // Or we update lastEngineTextLength.
+
+    // Let's modify TypingEngine.js to allow partial update or just accept that we need to suppress 1 frame?
+    // main.js lines ~600: gamepadManager.on('frame').
+    // If we just set a flag 'justSwitchedMode = true' and pass it?
+
+    // Simpler: gamepadManager provides 'getGamepads()'.
+    const gps = navigator.getGamepads ? navigator.getGamepads() : [];
+    const gp = gps[gamepadManager.index] || gps[0];
+    if (gp) {
+      typingEngine.resetInputState(gp);
+    }
+
     lastEngineTextLength = content.length;
 
     focusManager.setMode('EDITOR');
