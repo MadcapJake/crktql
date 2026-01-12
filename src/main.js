@@ -12,6 +12,8 @@ import { FocusManager } from './ui/FocusManager.js';
 import { NavigationBar } from './ui/NavigationBar.js';
 import { GridOverview } from './ui/GridOverview.js';
 import { HistoryManager } from './data/HistoryManager.js';
+import { EditorRenderer } from './ui/EditorRenderer.js';
+import { EditorMode } from './modes/EditorMode.js';
 import { InputDebugOverlay } from './ui/InputDebugOverlay.js'; // Moved up
 
 document.querySelector('#app').innerHTML = `
@@ -66,6 +68,7 @@ document.querySelector('#app').innerHTML = `
 const settingsManager = new SettingsManager(); // Keep this for config
 const gamepadManager = new GamepadManager();
 const typingEngine = new TypingEngine();
+const editorRenderer = new EditorRenderer('editor-view', typingEngine, settingsManager);
 const gamepadMenu = new GamepadMenu();
 // --- DEBUG OVERLAY ---
 const debugOverlay = new InputDebugOverlay(gamepadManager, typingEngine.mapper);
@@ -156,6 +159,19 @@ const bookMenu = new BookMenu();
 
 const navBar = new NavigationBar('bottom-bar');
 const gridOverview = new GridOverview('grid-overview', bookManager, historyManager);
+
+const editorMode = new EditorMode({
+  typingEngine,
+  bookManager,
+  historyManager,
+  focusManager,
+  gridOverview,
+  visualizer,
+  gamepadManager,
+  renderer: editorRenderer,
+  showNotification: (msg) => showNotification(msg),
+  onPaste: () => window.handlePaste && window.handlePaste(), // Stub or ref
+});
 
 // Initialize Calibration Manager
 const calibrationManager = new CalibrationManager(
@@ -1158,6 +1174,8 @@ gamepadManager.on('frame', (gamepad) => {
         }
 
         bookManager.setPartCursor(cursor);
+        part.cursor = cursor; // Sync local copy for immediate render
+        // console.log("Render Triggered. Cursor:", cursor);
         renderCustomEditor(part);
       }
 
@@ -1718,125 +1736,8 @@ async function handlePaste() {
 
 
 function renderCustomEditor(part, currentAnchor = selectionAnchor) {
-  const container = document.getElementById('editor-view');
-  if (!container || !part) return;
-
-  const content = part.content || "";
-  const cursor = part.cursor || 0;
-
-  // Pending Syllable Logic
-  const pending = typingEngine.getFormattedSyllable();
-  // We can assume TypingEngine.state.caseMode is current for styling pending chars if needed,
-  // but getFormattedSyllable applies upper/lower case already.
-
-  // Construct HTML
-  // Strategy: 
-  // 1. Text BEFORE cursor
-  // 2. Pending Text (AT cursor) -> wrapped in specialized span?
-  // 3. Cursor Effect (depends on type)
-  //    - BAR: insert <span class="cursor-bar"></span> between pending and post.
-  //    - BLOCK: The first char of POST is wrapped in <span class="cursor-block">C</span>. If post empty, space.
-  //    - UNDERLINE: Same as block logic but class cursor-underline.
-
-  const safeEscape = (str) => {
-    // Basic escape to prevent HTML injection
-    let escaped = str.replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/\n/g, '<br>')
-      .replace(/ /g, '&nbsp;');
-
-    // Render Citations: {{cite:x,y}} -> Pill
-    return escaped.replace(/\{\{cite:(-?\d+),(-?\d+)\}\}/g, '<span class="citation-pill">⌖ $1, $2</span>');
-  };
-
-  // Selection Logic
-  // const anchor = part.selectionAnchor; 
-  const anchor = currentAnchor; // Use passed or global anchor
-  const isSelectionActive = (anchor !== undefined && anchor !== null && anchor !== cursor);
-
-  let pre, sel, post;
-
-  if (isSelectionActive) {
-    // Range Selection
-    const start = Math.min(anchor, cursor);
-    const end = Math.max(anchor, cursor);
-
-    pre = safeEscape(content.slice(0, start));
-    const selText = safeEscape(content.slice(start, end));
-    post = safeEscape(content.slice(end));
-
-    // No cursor effect usually inside selection, or cursor is at one end.
-    // Standard is to just highlight the range. 
-    // User didn't specify cursor behavior in selection, but typically cursor is hidden or at edge.
-    // We will render cursor at the "cursor" end if needed, but for visual clarity, just highlighting the block is often enough.
-    // Let's render the highlight.
-
-    // If cursor is at 'end', it's after the selection block. If at 'start', before.
-    // Actually, standard editors show cursor at the active edge. 
-    // For simplicity and clarity in this custom UI:
-    // Just wrap the selected text in .selection-highlight.
-    // And we can optionally show the cursor indicator at the `cursor` position.
-
-    sel = `<span class="selection-highlight">${selText}</span>`;
-
-    // We need to inject the cursor indicator.
-    // If cursor > anchor, cursor is at start of 'post'.
-    // If cursor < anchor, cursor is at end of 'pre' (before 'sel').
-
-    const cursorHtml = `<span class="cursor cursor-bar"></span>`; // Always use bar in select mode for visibility? Or keep user preference.
-    // Actually, let's stick to user preference but standard text selection usually hides the block cursor.
-    // Let's just highlight.
-
-    container.innerHTML = pre + sel + post;
-
-  } else {
-    // Standard Cursor Logic
-    pre = safeEscape(content.slice(0, cursor));
-    const postRaw = content.slice(cursor);
-    const postEscaped = safeEscape(postRaw);
-
-    const pendingHtml = pending ? `<span class="pending-text">${safeEscape(pending)}</span>` : '';
-
-    let cursorHtml = '';
-    const cursorType = settingsManager.config.cursorType || 'BAR';
-
-    if (cursorType === 'BAR') {
-      cursorHtml = `<span class="cursor cursor-bar"></span>`;
-      container.innerHTML = pre + pendingHtml + cursorHtml + postEscaped;
-    } else {
-      let targetChar = postRaw.length > 0 ? postRaw[0] : ' ';
-      let rest = postRaw.length > 0 ? postRaw.slice(1) : '';
-
-      // ATOMIC CITATION RENDERING
-      // If cursor is at start of a citation, treat the whole tag as the "targetChar"
-      if (postRaw.startsWith('{{cite:')) {
-        const match = /^\{\{cite:-?\d+,-?\d+\}\}/.exec(postRaw);
-        if (match) {
-          targetChar = match[0];
-          rest = postRaw.slice(targetChar.length);
-        }
-      }
-
-      const targetHtml = safeEscape(targetChar);
-      const restHtml = safeEscape(rest);
-      const cursorClass = cursorType === 'BLOCK' ? 'cursor-block' : 'cursor-underline';
-
-      // Add special class for citations to ensuring styling is clean (e.g. no-break)
-      const isCitation = targetChar.startsWith('{{cite:');
-      const extraClass = isCitation ? ' cursor-atomic' : '';
-
-      cursorHtml = `<span class="cursor ${cursorClass}${extraClass}">${targetHtml}</span>`;
-      container.innerHTML = pre + pendingHtml + cursorHtml + restHtml;
-    }
-  }
-
-  // Scroll to cursor?
-  // Simple view follow: find .cursor element and scrollIntoView?
-  const cursorEl = container.querySelector('.cursor');
-  if (cursorEl) {
-    cursorEl.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-  }
+  // Delegate to safe EditorRenderer
+  editorRenderer.render(part, currentAnchor);
 }
 
 // Keep old indicators update? Or move to standard update status?
