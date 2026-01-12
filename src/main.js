@@ -1402,6 +1402,7 @@ gamepadManager.on('frame', (gamepad) => {
 
         visualizer.update(frameInput, state.mode, typingEngine.mappings, typingEngine.state.syllable);
       }
+      gamepadManager.lastButtons = { ...frameInput.buttons };
       break; // EDITOR case end
 
     case 'VISUAL_SELECT':
@@ -1776,13 +1777,13 @@ function updateIndicators() {
       const leftLocked = state.leftStick?.locked;
       const rightLocked = state.rightStick?.locked;
       const isSelectionActive = leftLocked || rightLocked || state.syllable?.onset; // "Selected Consonant" mode
-
+      const isModifierHeld = gamepadManager.lastButtons?.north;
       switch (state.mode) {
 
         case 'ONSET':
           icon = isSelectionActive
             ? '<i class="fa-regular fa-square"></i>'
-            : '<i class="fa-solid fa-border-none"></i>';
+            : isModifierHeld ? '<i class="fa-solid fa-pause"></i>' : '<i class="fa-solid fa-border-none"></i>';
           break;
         case 'RIME_LEFT': icon = '<i class="fa-solid fa-square-caret-left"></i>'; break;
         case 'RIME_RIGHT': icon = '<i class="fa-solid fa-square-caret-right"></i>'; break;
