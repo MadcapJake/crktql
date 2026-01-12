@@ -11,6 +11,7 @@ import { BookManager } from './data/BookManager.js';
 import { FocusManager } from './ui/FocusManager.js';
 import { NavigationBar } from './ui/NavigationBar.js';
 import { GridOverview } from './ui/GridOverview.js';
+import { HistoryManager } from './data/HistoryManager.js';
 import { InputDebugOverlay } from './ui/InputDebugOverlay.js'; // Moved up
 
 document.querySelector('#app').innerHTML = `
@@ -145,6 +146,7 @@ let selectionAnchor = null;
 let currentNotificationTimeout = null;
 
 const bookManager = new BookManager();
+const historyManager = new HistoryManager(bookManager);
 
 const focusManager = new FocusManager();
 import { HelpManager } from './ui/HelpManager.js';
@@ -153,7 +155,7 @@ import { BookMenu } from './ui/BookMenu.js';
 const bookMenu = new BookMenu();
 
 const navBar = new NavigationBar('bottom-bar');
-const gridOverview = new GridOverview('grid-overview', bookManager);
+const gridOverview = new GridOverview('grid-overview', bookManager, historyManager);
 
 // Initialize Calibration Manager
 const calibrationManager = new CalibrationManager(
@@ -619,6 +621,17 @@ window.addEventListener('request-citation-insert', (e) => {
       typingEngine.resetInputState(gp);
     }
 
+    if (part) {
+      historyManager.push({
+        type: 'ADD_CITATION',
+        partKey: bookManager.currentPartKey,
+        data: {
+          text: tag,
+          index: focusManager.citationUpdateTarget ? focusManager.citationUpdateTarget.start : (part.cursor || 0)
+        }
+      });
+    }
+
     lastEngineTextLength = content.length;
 
     focusManager.setMode('EDITOR');
@@ -736,10 +749,27 @@ gamepadManager.on('frame', (gamepad) => {
       if (!rState) break; // Safety
 
       // 1. SAVE (B)
-      if (frameInput.buttons.east && !gamepadManager.lastButtons.east) {
+      const lastBtns = gamepadManager.lastButtons || {}; // Safety check
+      if (frameInput.buttons.east && !lastBtns.east) {
         const newName = rState.content;
         const { x, y } = focusManager.renameTarget;
+
+        // Push to History (we need old name)
+        const oldName = bookManager.getPart(x, y).name;
+
         bookManager.renamePart(x, y, newName);
+
+        historyManager.push({
+          type: 'RENAME_PART',
+          partKey: `${x},${y}`,
+          data: {
+            x: x,
+            y: y,
+            oldName: oldName,
+            newName: newName
+          }
+        });
+
         focusManager.setMode('OVERVIEW');
 
         // Prevent fall-through! Sync the overview's last button state to current frame
@@ -848,6 +878,80 @@ gamepadManager.on('frame', (gamepad) => {
 
       // Modifier State (Y / North)
       const isModifierHeld = frameInput.buttons.north;
+
+
+
+      // Undo: Y (North) + Left Trigger
+      // Correct Placement: Before any 'lastButtons' generic update
+      // Correct Placement: Before any 'lastButtons' generic update
+      if (isModifierHeld && frameInput.buttons.lt && !gamepadManager.lastButtons?.lt) {
+        historyManager.undo().then(op => {
+          if (op) {
+            showNotification(`Undo: ${op.type} (To: ${op.navigateTo?.mode || 'EDITOR'})`);
+
+            if (op.navigateTo) {
+              // Check if we need to switch part
+              if (bookManager.currentPartKey !== `${op.navigateTo.x},${op.navigateTo.y}`) {
+                bookManager.selectPart(op.navigateTo.x, op.navigateTo.y);
+              }
+
+              if (op.navigateTo.mode) {
+                focusManager.setMode(op.navigateTo.mode);
+                if (op.navigateTo.mode === 'OVERVIEW') {
+                  gridOverview.setCursor(op.navigateTo.x, op.navigateTo.y);
+                  gridOverview.updateView(true);
+                }
+              }
+            }
+
+            // Sync Engine regardless
+            const p = bookManager.getCurrentPart();
+            if (p) {
+              typingEngine.reset(p.content);
+              lastEngineTextLength = p.content.length;
+              // Also force render
+              renderCustomEditor(p);
+            }
+          } else {
+            showNotification("Nothing to Undo");
+          }
+        });
+        gamepadManager.lastButtons.lt = true; // Consume
+        return;
+      }
+
+      // Redo: Y (North) + Right Trigger
+      if (isModifierHeld && frameInput.buttons.rt && !gamepadManager.lastButtons.rt) {
+        historyManager.redo().then(op => {
+          if (op) {
+            showNotification(`Redo: ${op.type}`);
+
+            if (op.navigateTo) {
+              if (bookManager.currentPartKey !== `${op.navigateTo.x},${op.navigateTo.y}`) {
+                bookManager.selectPart(op.navigateTo.x, op.navigateTo.y);
+              }
+              if (op.navigateTo.mode) {
+                focusManager.setMode(op.navigateTo.mode);
+                if (op.navigateTo.mode === 'OVERVIEW') {
+                  gridOverview.setCursor(op.navigateTo.x, op.navigateTo.y);
+                  gridOverview.updateView(true);
+                }
+              }
+            }
+
+            const p = bookManager.getCurrentPart();
+            if (p) {
+              typingEngine.reset(p.content);
+              lastEngineTextLength = p.content.length;
+              renderCustomEditor(p);
+            }
+          } else {
+            showNotification("Nothing to Redo");
+          }
+        });
+        gamepadManager.lastButtons.rt = true; // Consume
+        return;
+      }
 
       if (justPressed('left')) {
         if (isModifierHeld) {
@@ -1076,9 +1180,15 @@ gamepadManager.on('frame', (gamepad) => {
         gamepadManager.lastButtons = { ...frameInput.buttons };
       }
 
-      gamepadManager.lastButtons = { ...frameInput.buttons }; // General tracking for EDITOR too
 
 
+      // 3. Command Layer Guard
+      if (isModifierHeld) {
+        gamepadManager.lastButtons = { ...frameInput.buttons };
+        // Do NOT process TypingEngine if modifier is held.
+        // This prevents commands (Undo/Redo/Paste/Select) from leaking into typing logic.
+        break;
+      }
 
       // Typing Logic
       const state = typingEngine.processFrame(gamepad);
@@ -1099,6 +1209,16 @@ gamepadManager.on('frame', (gamepad) => {
                 if (/^\{\{cite:.*?\}\}$/.test(tag)) {
                   newContent = content.slice(0, cursor) + content.slice(cursor + tag.length);
                   handledAtomic = true;
+
+                  historyManager.push({
+                    type: 'REMOVE_CITATION',
+                    partKey: bookManager.currentPartKey,
+                    data: {
+                      text: tag,
+                      index: cursor
+                    }
+                  });
+
                   // Cursor stays same
 
                   typingEngine.reset(newContent);
@@ -1108,6 +1228,16 @@ gamepadManager.on('frame', (gamepad) => {
             }
 
             if (!handledAtomic && cursor < content.length) {
+              const removedText = content.slice(cursor, cursor + 1);
+              historyManager.push({
+                type: 'REMOVE_TEXT',
+                partKey: bookManager.currentPartKey,
+                data: {
+                  text: removedText,
+                  index: cursor
+                }
+              });
+
               newContent = content.slice(0, cursor) + content.slice(cursor + 1);
             }
           } else if (state.action === 'DELETE_WORD_LEFT') {
@@ -1115,6 +1245,19 @@ gamepadManager.on('frame', (gamepad) => {
             let target = cursor - 1;
             while (target > 0 && /\s/.test(content[target - 1])) target--;
             while (target > 0 && !/\s/.test(content[target - 1])) target--;
+
+            const removedText = content.slice(target, cursor);
+            if (removedText.length > 0) {
+              historyManager.push({
+                type: 'REMOVE_TEXT',
+                partKey: bookManager.currentPartKey,
+                data: {
+                  text: removedText,
+                  index: target
+                }
+              });
+            }
+
             newContent = content.slice(0, target) + content.slice(cursor);
             newCursor = target;
           }
@@ -1153,6 +1296,16 @@ gamepadManager.on('frame', (gamepad) => {
             // Insertion
             const added = currentEngineText.slice(lastEngineTextLength);
             newContent = content.slice(0, cursor) + added + content.slice(cursor);
+
+            historyManager.push({
+              type: 'ADD_TEXT',
+              partKey: bookManager.currentPartKey,
+              data: {
+                text: added,
+                index: cursor
+              }
+            });
+
             newCursor = cursor + diff;
           } else {
             // Backspace (Standard, from Engine slice)
@@ -1181,6 +1334,15 @@ gamepadManager.on('frame', (gamepad) => {
                 newCursor = startIdx;
                 handledAtomic = true;
 
+                historyManager.push({
+                  type: 'REMOVE_CITATION',
+                  partKey: bookManager.currentPartKey,
+                  data: {
+                    text: tag,
+                    index: startIdx
+                  }
+                });
+
                 typingEngine.reset(newContent);
                 lastEngineTextLength = newContent.length;
               }
@@ -1190,6 +1352,19 @@ gamepadManager.on('frame', (gamepad) => {
               // Standard Backspace
               const amount = -diff;
               const start = Math.max(0, cursor - amount);
+              const removedText = content.slice(start, cursor);
+
+              if (removedText.length > 0) {
+                historyManager.push({
+                  type: 'REMOVE_TEXT',
+                  partKey: bookManager.currentPartKey,
+                  data: {
+                    text: removedText,
+                    index: start
+                  }
+                });
+              }
+
               newContent = content.slice(0, start) + content.slice(cursor);
               newCursor = start;
 
@@ -1325,6 +1500,16 @@ gamepadManager.on('frame', (gamepad) => {
           navigator.clipboard.writeText(rangeText).then(() => {
             // Delete content using captured indices
             const newContent = originalContent.slice(0, sStart) + originalContent.slice(sEnd);
+
+            const removedText = originalContent.slice(sStart, sEnd);
+            historyManager.push({
+              type: 'REMOVE_TEXT',
+              partKey: bookManager.currentPartKey,
+              data: {
+                text: removedText,
+                index: sStart
+              }
+            });
 
             bookManager.setCurrentPartContent(newContent);
             bookManager.setPartCursor(sStart);
@@ -1621,23 +1806,27 @@ else debugOverlay.element.style.display = 'none';
 const exportBtn = document.getElementById('export-logs-btn');
 if (exportBtn) {
   exportBtn.addEventListener('click', () => {
-    const logs = logger.export();
+    // Collect all logs: Console + History
+    const consoleLogs = logger.export();
+    const historyLogs = historyManager.exportLogs();
+
+    const combined = `=== CONSOLE LOGS ===\n${consoleLogs}\n\n=== HISTORY LOGS ===\n${historyLogs}`;
 
     // 1. Always log to console as backup
     console.log("--- DEBUG LOG EXPORT ---");
-    console.log(logs);
+    console.log(combined);
     console.log("------------------------");
 
     // 2. Try Clipboard API
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(logs).then(() => {
-        alert('Debug logs copied to clipboard!');
+      navigator.clipboard.writeText(combined).then(() => {
+        showNotification('Debug logs copied to clipboard!', 3000);
       }).catch(err => {
         console.error('Clipboard API failed', err);
-        fallbackCopy(logs);
+        fallbackCopy(combined);
       });
     } else {
-      fallbackCopy(logs);
+      fallbackCopy(combined);
     }
   });
 }

@@ -1,8 +1,9 @@
 
 export class GridOverview {
-    constructor(elementId, bookManager) {
+    constructor(elementId, bookManager, historyManager) {
         this.container = document.getElementById(elementId);
         this.bookManager = bookManager;
+        this.historyManager = historyManager; // Store it
         this.cursor = { x: 0, y: 0 };
         this.zoomLevel = 1.0;
         this.minZoom = 0.2;
@@ -102,6 +103,13 @@ export class GridOverview {
             if (!part) {
                 // Create & Enter? Or just Create
                 this.bookManager.createPart(this.cursor.x, this.cursor.y);
+                if (this.historyManager) {
+                    this.historyManager.push({
+                        type: 'ADD_PART',
+                        partKey: `${this.cursor.x},${this.cursor.y}`,
+                        data: { x: this.cursor.x, y: this.cursor.y }
+                    });
+                }
                 this.updateView(true); // Force re-render of content
             }
 
@@ -114,7 +122,26 @@ export class GridOverview {
         if (buttons.west) {
             if (!this.holdStartTime) this.holdStartTime = now;
             if (now - this.holdStartTime > 1000 && !this.deleteTriggered) {
+                // We need to capture content before delete for Undo?
+                const part = this.bookManager.getPart(this.cursor.x, this.cursor.y);
+                const content = part ? part.content : "";
+                const name = part ? part.name : "";
+
                 this.bookManager.deletePart(this.cursor.x, this.cursor.y);
+
+                if (this.historyManager) {
+                    this.historyManager.push({
+                        type: 'DELETE_PART',
+                        partKey: `${this.cursor.x},${this.cursor.y}`,
+                        data: {
+                            x: this.cursor.x,
+                            y: this.cursor.y,
+                            content: content,
+                            name: name
+                        }
+                    });
+                }
+
                 this.deleteTriggered = true;
                 this.updateView(true);
             }

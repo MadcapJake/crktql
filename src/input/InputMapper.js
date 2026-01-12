@@ -171,6 +171,8 @@ export class InputMapper {
                 start: readInput(indices.buttons.start),
                 l3: readInput(indices.buttons.l3),
                 r3: readInput(indices.buttons.r3),
+                lt: lt > this.TRIGGER_THRESHOLD,
+                rt: rt > this.TRIGGER_THRESHOLD,
                 dpad: {
                     up: readDpad('up'),
                     down: readDpad('down'),
