@@ -46,172 +46,22 @@ export class GridOverview {
         this.container.style.display = 'none';
     }
 
-    syncInputState(input) {
-        // Sync internal state to current input to prevent edge triggers on mode switch
-        if (input && input.buttons) {
-            this.lastButtons = { ...input.buttons };
-            this.lastDpad = { ...input.buttons.dpad };
-        }
+    setZoom(level) {
+        this.zoomLevel = level;
     }
 
-    handleInput(input) {
-        if (!input) return;
-
-        const dpad = input.buttons.dpad;
-        const now = Date.now();
-        const buttons = input.buttons;
-
-        // ZOOM Controls (LB/RB)
-        if (buttons.lb && !this.lastButtons.lb) {
-            this.adjustZoom(0.2); // Zoom In
-        }
-        if (buttons.rb && !this.lastButtons.rb) {
-            this.adjustZoom(-0.2); // Zoom Out
-        }
-
-        // Navigation
-        // Modifier (Y) + D-pad -> Edge Jump
-        const isMod = buttons.north;
-
-        if (now - this.lastMove > 150) { // Debounce
-            let moved = false;
-
-            if (isMod) {
-                // Jump to Edge
-                if (dpad.left && !this.lastButtons.dpad?.left) { this.jumpToEdge('left'); moved = true; }
-                if (dpad.right && !this.lastButtons.dpad?.right) { this.jumpToEdge('right'); moved = true; }
-                if (dpad.up && !this.lastButtons.dpad?.up) { this.jumpToEdge('up'); moved = true; }
-                if (dpad.down && !this.lastButtons.dpad?.down) { this.jumpToEdge('down'); moved = true; }
-            } else {
-                // Standard Move
-                if (dpad.up) { this.cursor.y++; moved = true; }
-                if (dpad.down) { this.cursor.y--; moved = true; }
-                if (dpad.left) { this.cursor.x--; moved = true; }
-                if (dpad.right) { this.cursor.x++; moved = true; }
-            }
-
-            if (moved) {
-                this.lastMove = now;
-                this.updateView();
-            }
-        }
-
-        // Actions
-        // A (South) -> Enter Part
-        if (buttons.south && !this.lastButtons.south) {
-            const part = this.bookManager.getPart(this.cursor.x, this.cursor.y);
-            if (!part) {
-                // Create & Enter? Or just Create
-                this.bookManager.createPart(this.cursor.x, this.cursor.y);
-                if (this.historyManager) {
-                    this.historyManager.push({
-                        type: 'ADD_PART',
-                        partKey: `${this.cursor.x},${this.cursor.y}`,
-                        data: { x: this.cursor.x, y: this.cursor.y }
-                    });
-                }
-                this.updateView(true); // Force re-render of content
-            }
-
-            // Select and Request Focus
-            this.bookManager.selectPart(this.cursor.x, this.cursor.y);
-            window.dispatchEvent(new CustomEvent('request-editor-focus'));
-        }
-
-        // X (West) -> Delete (Hold)
-        if (buttons.west) {
-            if (!this.holdStartTime) this.holdStartTime = now;
-            if (now - this.holdStartTime > 1000 && !this.deleteTriggered) {
-                // We need to capture content before delete for Undo?
-                const part = this.bookManager.getPart(this.cursor.x, this.cursor.y);
-                const content = part ? part.content : "";
-                const name = part ? part.name : "";
-
-                this.bookManager.deletePart(this.cursor.x, this.cursor.y);
-
-                if (this.historyManager) {
-                    this.historyManager.push({
-                        type: 'DELETE_PART',
-                        partKey: `${this.cursor.x},${this.cursor.y}`,
-                        data: {
-                            x: this.cursor.x,
-                            y: this.cursor.y,
-                            content: content,
-                            name: name
-                        }
-                    });
-                }
-
-                this.deleteTriggered = true;
-                this.updateView(true);
-            }
-        } else {
-            this.holdStartTime = null;
-            this.deleteTriggered = false;
-        }
-
-        // Y (North) -> Rename handled by mod jump? 
-        // Logic: specific Rename trigger on RELEASE if no jump occurred?
-        // Or simpler: If "isMod" is true but NO dpad movement happened since pressed?
-        // Let's track if mod was used for navigation.
-        if (buttons.north && !this.lastButtons.north) {
-            this.modUsedForNav = false;
-        }
-
-        // Check if movement happened while mod held
-        if (buttons.north && (dpad.up || dpad.down || dpad.left || dpad.right)) {
-            this.modUsedForNav = true;
-        }
-
-        // If Y released and NOT used for nav -> Rename
-        if (!buttons.north && this.lastButtons.north && !this.modUsedForNav) {
-            if (this.ignoreNextRename) {
-                this.ignoreNextRename = false; // Consumed
-            } else {
-                const part = this.bookManager.getPart(this.cursor.x, this.cursor.y);
-                if (part) {
-                    window.dispatchEvent(new CustomEvent('request-rename', {
-                        detail: { x: this.cursor.x, y: this.cursor.y, name: part.name }
-                    }));
-                }
-            }
-        }
-
-        // B (East) -> Insert/Update Citation
-        // Prevent trigger if Mod (Y) is held to avoid conflict with Follow/Rename overlap inputs
-        if (buttons.east && !this.lastButtons.east && !buttons.north) {
-            console.log("Overview: B Pressed. Dispatching event.");
-            window.dispatchEvent(new CustomEvent('request-citation-insert', {
-                detail: { x: this.cursor.x, y: this.cursor.y }
-            }));
-        }
-
-        this.lastButtons = { ...buttons, dpad: { ...dpad } };
-    }
-
-    adjustZoom(delta) {
-        this.zoomLevel = Math.max(this.minZoom, Math.min(this.maxZoom, this.zoomLevel + delta));
-        this.updateView(); // Update scale transform
-    }
-
-    jumpToEdge(direction) {
-        // Calculate visible range based on Screen Size and Zoom
+    getPageSize(zoomLevel) {
         const w = window.innerWidth;
         const h = window.innerHeight;
-
-        // Effective Grid Cell Size
-        const cellW = (this.PART_WIDTH + this.GAP) * this.zoomLevel;
-        const cellH = (this.PART_HEIGHT + this.GAP) * this.zoomLevel;
-
-        // How many fit from center to edge?
-        const cols = Math.floor((w / 2) / cellW);
-        const rows = Math.floor((h / 2) / cellH);
-
-        if (direction === 'left') this.cursor.x -= cols;
-        if (direction === 'right') this.cursor.x += cols;
-        if (direction === 'up') this.cursor.y += rows; // Y+ is UP
-        if (direction === 'down') this.cursor.y -= rows;
+        const cellW = (this.PART_WIDTH + this.GAP) * zoomLevel;
+        const cellH = (this.PART_HEIGHT + this.GAP) * zoomLevel;
+        return {
+            cols: Math.floor((w / 2) / cellW),
+            rows: Math.floor((h / 2) / cellH)
+        };
     }
+
+
 
     setCursor(x, y) {
         // Simple direct jump for MVP. Animation can be added to updateView if we use transition CSS.

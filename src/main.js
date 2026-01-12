@@ -9,12 +9,17 @@ import { SettingsManager } from './ui/SettingsManager.js';
 import { logger } from './utils/DebugLogger.js';
 import { BookManager } from './data/BookManager.js';
 import { FocusManager } from './ui/FocusManager.js';
-import { NavigationBar } from './ui/NavigationBar.js';
+
+import { Gutter } from './ui/Gutter.js';
+import { GutterMode } from './modes/GutterMode.js';
 import { GridOverview } from './ui/GridOverview.js';
 import { HistoryManager } from './data/HistoryManager.js';
 import { EditorRenderer } from './ui/EditorRenderer.js';
 import { EditorMode } from './modes/EditorMode.js';
 import { VisualSelectMode } from './modes/VisualSelectMode.js';
+import { OverviewMode } from './modes/OverviewMode.js';
+
+import { InputRouter } from './input/InputRouter.js';
 import { InputDebugOverlay } from './ui/InputDebugOverlay.js'; // Moved up
 
 document.querySelector('#app').innerHTML = `
@@ -158,8 +163,28 @@ const helpManager = new HelpManager(focusManager);
 import { BookMenu } from './ui/BookMenu.js';
 const bookMenu = new BookMenu();
 
-const navBar = new NavigationBar('bottom-bar');
+
+
+const gutter = new Gutter('bottom-bar');
+const gutterMode = new GutterMode({ gutter });
 const gridOverview = new GridOverview('grid-overview', bookManager, historyManager);
+const overviewMode = new OverviewMode({
+  gridOverview,
+  bookManager,
+  historyManager,
+  focusManager
+});
+
+// Hook Menu Close Events
+gamepadMenu.onClose = () => {
+  if (focusManager.mode === 'GAMEPAD_MENU') focusManager.setMode(focusManager.previousMode || 'EDITOR');
+};
+settingsManager.onClose = () => {
+  if (focusManager.mode === 'SETTINGS_MENU') focusManager.setMode(focusManager.previousMode || 'EDITOR');
+};
+bookMenu.onClose = () => {
+  if (focusManager.mode === 'BOOK_MENU') focusManager.setMode(focusManager.previousMode || 'EDITOR');
+};
 
 const editorMode = new EditorMode({
   typingEngine,
@@ -188,6 +213,20 @@ const visualSelectMode = new VisualSelectMode({
   showNotification: (msg) => showNotification(msg)
 });
 
+const inputRouter = new InputRouter({
+  focusManager,
+  gutterMode,
+  overviewMode,
+  editorMode,
+  visualSelectMode,
+  settingsManager,
+  gamepadMenu,
+  bookMenu,
+  helpManager,
+  gridOverview,
+  gamepadManager
+});
+
 // Initialize Calibration Manager
 const calibrationManager = new CalibrationManager(
   gamepadManager,
@@ -204,11 +243,11 @@ focusManager.onChange = (mode) => {
 
   // Toggle UI visibility based on mode
   if (mode === 'OVERVIEW') {
-    gridOverview.activate();
+    overviewMode.activate();
     document.querySelector('.editor-container').style.display = 'none';
     document.getElementById('visualizer-container').style.display = 'none';
   } else if (mode === 'EDITOR' || mode === 'RENAMING') {
-    gridOverview.deactivate();
+    overviewMode.deactivate();
     document.querySelector('.editor-container').style.display = 'flex';
     document.getElementById('visualizer-container').style.display = 'flex';
 
@@ -220,9 +259,9 @@ focusManager.onChange = (mode) => {
   }
 
   if (mode === 'BOTTOM_BAR') {
-    navBar.activate();
+    gutterMode.activate();
   } else {
-    navBar.deactivate();
+    gutterMode.deactivate();
   }
   updateStatusText(mode);
 };
@@ -253,7 +292,7 @@ function updateStatusText(mode) {
   if (mode === 'OVERVIEW') {
     const isUpdate = !!focusManager.citationUpdateTarget;
     const updateText = isUpdate
-      ? `Update (Current: ${gridOverview.cursor.x}, ${gridOverview.cursor.y})`
+      ? `Update (Current: ${overviewMode.cursor.x}, ${overviewMode.cursor.y})`
       : `Cite`;
 
     html = `
@@ -358,21 +397,12 @@ window.addEventListener('request-help-toggle', (e) => {
   helpManager.toggle(e.detail.input);
 });
 
-document.getElementById('book-menu-btn')?.addEventListener('click', () => {
-  bookMenu.toggle();
-  if (bookMenu.isOpen) focusManager.setMode('BOOK_MENU');
-});
 
-window.addEventListener('request-book-menu-toggle', (e) => {
-  if (bookMenu.toggle(e.detail.input)) {
-    focusManager.setMode('BOOK_MENU');
-  }
-});
 
 // Book Menu Actions
 bookMenu.onAction = (action) => {
   if (action === 'new') {
-    showConfirmModal('Create new book? Unsaved changes will be lost.', () => {
+    inputRouter.requestConfirm('Create new book? Unsaved changes will be lost.', () => {
       bookManager.loadBook({}, "untitled.htz");
       bookManager.createPart(0, 0);
       focusManager.setMode('EDITOR');
@@ -423,13 +453,29 @@ bookMenu.onAction = (action) => {
 const gearBtn = document.getElementById('settings-btn');
 if (gearBtn) {
   gearBtn.addEventListener('click', () => {
-    if (!settingsManager.isOpen) settingsManager.toggle();
+    if (!settingsManager.isOpen) {
+      settingsManager.toggle();
+      focusManager.setMode('SETTINGS_MENU');
+    }
   });
 
   const gamepadBtn = document.getElementById('gamepad-btn');
   gamepadBtn.addEventListener('click', () => {
-    if (!gamepadMenu.isOpen) gamepadMenu.toggle();
+    if (!gamepadMenu.isOpen) {
+      gamepadMenu.toggle();
+      focusManager.setMode('GAMEPAD_MENU');
+    }
   });
+
+  const bookBtn = document.getElementById('book-menu-btn');
+  if (bookBtn) {
+    bookBtn.addEventListener('click', () => {
+      if (!bookMenu.isOpen) {
+        bookMenu.toggle();
+        focusManager.setMode('BOOK_MENU');
+      }
+    });
+  }
 }
 
 settingsManager.onUpdate = (config) => {
@@ -722,105 +768,11 @@ function loop() {
     return;
   }
 
-  // Gamepad Menu
-  if (gamepadMenu.isOpen) {
-    if (frameInput.buttons.start && !gamepadManager.lastStart) {
-      gamepadMenu.close();
-      gamepadManager.lastStart = true;
-    } else {
-      gamepadMenu.handleInput(frameInput);
-    }
-    return;
-  }
 
-  // Settings Menu
-  if (settingsManager.isOpen) {
-    if (frameInput.buttons.start && !gamepadManager.lastStart) {
-      settingsManager.toggle();
-      gamepadManager.lastStart = true;
-    } else {
-      settingsManager.handleInput(frameInput);
-    }
-    return;
-  }
+  // --- Input Routing ---
+  inputRouter.route(frameInput, gamepad);
 
-  // Help Menu
-  if (helpManager.isOpen) {
-    helpManager.handleInput(frameInput);
-    return;
-  }
 
-  const startPressed = frameInput.buttons.start;
-  const selectPressed = frameInput.buttons.select;
-
-  // --- 2. Global Toggles ---
-  // Start -> Toggle Bottom Bar (Unless in specific modes)
-  if (focusManager.mode !== 'DIALOG_CONFIRM' && focusManager.mode !== 'BOOK_MENU' && startPressed && !gamepadManager.lastStart) {
-    focusManager.toggleBottomBar();
-  }
-
-  // Select -> Toggle Overview
-  if (focusManager.mode !== 'DIALOG_CONFIRM' && focusManager.mode !== 'RENAMING' && selectPressed && !gamepadManager.lastSelect) {
-    if (focusManager.mode === 'OVERVIEW') {
-      // Reset Targets
-      focusManager.citationUpdateTarget = null;
-      gridOverview.setLinkTarget(null);
-    }
-    focusManager.toggleOverview();
-    if (focusManager.mode === 'OVERVIEW') {
-      gridOverview.syncInputState(frameInput);
-    }
-  }
-
-  // --- Mode Switching / Focus Management ---
-  // Update last global buttons specifically for toggles if we didn't return?
-  // Actually, allow fallthrough to specific modes, but we need to update lastStart/lastSelect at end of loop OR manage them here.
-  // Best practice: Update at end of loop or shared state.
-  gamepadManager.lastStart = startPressed;
-  gamepadManager.lastSelect = selectPressed;
-  switch (focusManager.mode) {
-    case 'BOTTOM_BAR':
-      navBar.handleInput(frameInput);
-      break;
-
-    case 'OVERVIEW':
-      gridOverview.handleInput(frameInput);
-      break;
-
-    case 'EDITOR':
-      editorMode.handleInput(frameInput, gamepad);
-      break;
-
-    case 'VISUAL_SELECT':
-      visualSelectMode.handleInput(frameInput);
-      break;
-
-    case 'DIALOG_CONFIRM':
-      // Dialog logic is currently event-driven or simple check?
-      // check if we have modal open?
-      // actually DIALOG_CONFIRM logic was partially inline in the old big switch.
-      // We need to support it if it relies on polling.
-      // Let's check if we deleted the DIALOG_CONFIRM logic.
-      // Yes, we did. The switch ended at 970 in previous view.
-      // We need to restore DIALOG_CONFIRM logic here or in a DialogManager.
-      // For now, inline restoration.
-
-      const startPressed = frameInput.buttons.start;
-      // ... existing code ...
-      if (startPressed && !gamepadManager.lastStart) {
-        if (confirmCallback) confirmCallback();
-        document.getElementById('confirm-modal').style.display = 'none';
-        confirmCallback = null;
-      }
-
-      // B (East) -> Cancel
-      if (frameInput.buttons.east) {
-        document.getElementById('confirm-modal').style.display = 'none';
-        confirmCallback = null;
-        focusManager.setMode(focusManager.previousMode || 'EDITOR');
-      }
-      break;
-  }
 }
 
 // Start

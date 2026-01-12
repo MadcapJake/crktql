@@ -1,7 +1,7 @@
 
 export class FocusManager {
     constructor() {
-        this.mode = 'EDITOR'; // EDITOR, OVERVIEW, BOTTOM_BAR, DIALOG
+        this.mode = 'EDITOR'; // EDITOR, OVERVIEW, BOTTOM_BAR, DIALOG_CONFIRM, RENAMING, BOOK_MENU, SETTINGS_MENU, GAMEPAD_MENU
         this.previousMode = 'EDITOR';
         this.onChange = null;
     }
