@@ -88,8 +88,7 @@ export class HistoryManager {
         this.redoStack.push(op);
         this.saveToSession();
 
-        await this.applyOperation(op, true); // isUndo = true
-        return op;
+        return await this.applyOperation(op, true); // Return the RESULT (with navigateTo)
     }
 
     async redo() {
@@ -99,8 +98,7 @@ export class HistoryManager {
         this.undoStack.push(op);
         this.saveToSession();
 
-        await this.applyOperation(op, false); // isUndo = false
-        return op;
+        return await this.applyOperation(op, false); // Return the RESULT (with navigateTo)
     }
 
     async applyOperation(op, isUndo) {
@@ -121,7 +119,7 @@ export class HistoryManager {
                     this._addText(op.partKey, op.data.index, op.data.text);
                 }
                 const [tx, ty] = op.partKey.split(',').map(Number);
-                result.navigateTo = { x: tx, y: ty };
+                result.navigateTo = { x: tx, y: ty, mode: 'EDITOR' }; // Force EDITOR mode
                 break;
 
             case 'REMOVE_TEXT':
@@ -133,7 +131,7 @@ export class HistoryManager {
                 }
                 // Determine coordinates from partKey (format "x,y")
                 const [rx, ry] = op.partKey.split(',').map(Number);
-                result.navigateTo = { x: rx, y: ry };
+                result.navigateTo = { x: rx, y: ry, mode: 'EDITOR' }; // Force EDITOR mode
                 break;
 
             case 'ADD_PART':

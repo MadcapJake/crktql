@@ -188,6 +188,10 @@ focusManager.onChange = (mode) => {
         typingEngine.reset(part.content);
         lastEngineTextLength = part.content.length;
         editorLastDpad = { up: false, down: false, left: false, right: false };
+
+        // CRITICAL: Reset Input State to prevent entry button from typing
+        const gp = gamepadManager.getActiveGamepad();
+        if (gp) typingEngine.resetInputState(gp);
       }
     }
   }
@@ -899,6 +903,8 @@ gamepadManager.on('frame', (gamepad) => {
                 focusManager.setMode(op.navigateTo.mode);
                 if (op.navigateTo.mode === 'OVERVIEW') {
                   gridOverview.setCursor(op.navigateTo.x, op.navigateTo.y);
+                  gridOverview.syncInputState(frameInput); // Sync state so Overview knows Y is held
+                  gridOverview.ignoreNextRename = true; // Prevent Y release from triggering rename
                   gridOverview.updateView(true);
                 }
               }
@@ -934,6 +940,8 @@ gamepadManager.on('frame', (gamepad) => {
                 focusManager.setMode(op.navigateTo.mode);
                 if (op.navigateTo.mode === 'OVERVIEW') {
                   gridOverview.setCursor(op.navigateTo.x, op.navigateTo.y);
+                  gridOverview.syncInputState(frameInput); // Sync state so Overview knows Y is held
+                  gridOverview.ignoreNextRename = true; // Prevent Y release from triggering rename
                   gridOverview.updateView(true);
                 }
               }
