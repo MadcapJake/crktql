@@ -142,8 +142,10 @@ const visualizer = new Visualizer('visualizer-container');
 let editorLastDpad = { up: false, down: false, left: false, right: false };
 let lastEngineTextLength = 0;
 let selectionAnchor = null;
+let currentNotificationTimeout = null;
 
 const bookManager = new BookManager();
+
 const focusManager = new FocusManager();
 import { HelpManager } from './ui/HelpManager.js';
 const helpManager = new HelpManager(focusManager);
@@ -197,8 +199,6 @@ focusManager.onChange = (mode) => {
 };
 
 // Persistent Status Helper
-let currentNotificationTimeout = null;
-
 function updateStatusText(mode) {
   const area = document.getElementById('notification-area');
   if (!area) return;
@@ -498,6 +498,7 @@ settingsManager.onUpdate = (config) => {
 };
 
 // Initial Render
+settingsManager.loadSettings(); // Force load from persistence
 settingsManager.render();
 settingsManager.onUpdate(settingsManager.config);
 updateStatusText(focusManager.mode); // Ensure initial status text is shown
@@ -1603,4 +1604,27 @@ function fallbackCopy(text) {
   }
 
   document.body.removeChild(textArea);
+}
+
+// --- Initialization ---
+// Load Persistence last to ensure UI helpers (showNotification) are ready
+if (bookManager.loadFromStorage()) {
+  setTimeout(() => {
+    if (typeof showNotification === 'function') {
+      showNotification("Restored Book from Storage");
+    }
+    // Refresh Editor State with Loaded Data
+    const part = bookManager.getCurrentPart();
+    if (part) {
+      typingEngine.reset(part.content);
+      lastEngineTextLength = part.content.length;
+      if (typeof renderCustomEditor === 'function') renderCustomEditor(part);
+
+      // Restore Cursor if available?
+      // TypingEngine reset might zero it.
+      // We should sync typingEngine cursor to part.cursor if possible (not currently supported by reset)
+      // Manual sync:
+      // typingEngine.cursorIndex = part.cursor; // If public
+    }
+  }, 100);
 }

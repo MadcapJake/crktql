@@ -24,6 +24,33 @@ export class SettingsManager extends SubMenu {
         ];
     }
 
+    loadSettings() {
+        try {
+            const saved = localStorage.getItem('crktqla_settings');
+            console.log('[SettingsManager] Loading raw settings:', saved);
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                this.config = { ...this.config, ...parsed };
+                console.log('[SettingsManager] Merged settings:', this.config);
+            } else {
+                console.log('[SettingsManager] No saved settings found. Using defaults.');
+            }
+        } catch (e) {
+            console.error('[SettingsManager] Failed to load settings:', e);
+        }
+    }
+
+    saveSettings() {
+        console.log('[SettingsManager] inside saveSettings function.');
+        try {
+            const data = JSON.stringify(this.config);
+            localStorage.setItem('crktqla_settings', data);
+            console.log('[SettingsManager] Saved settings to storage:', data);
+        } catch (e) {
+            console.error('[SettingsManager] Failed to save settings:', e);
+        }
+    }
+
     onConfirm(option) {
         if (option.key === 'done') {
             this.close();
@@ -45,6 +72,7 @@ export class SettingsManager extends SubMenu {
     }
 
     toggleOption(option) {
+        console.log('[SettingsManager] toggleOption called for:', option.key);
         if (option.type === 'toggle') {
             console.log(`[SettingsManager] Toggling ${option.key}. onUpdate is:`, this.onUpdate);
             this.config[option.key] = !this.config[option.key];
@@ -52,6 +80,7 @@ export class SettingsManager extends SubMenu {
             if (this.onUpdate) {
                 console.log('[SettingsManager] Calling onUpdate...');
                 this.onUpdate(this.config);
+                console.log('[SettingsManager] onUpdate returned.');
             } else {
                 console.warn('[SettingsManager] onUpdate is missing!');
             }
@@ -59,6 +88,8 @@ export class SettingsManager extends SubMenu {
             // Tapping A on select/range circles forward
             this.onRight(option);
         }
+        console.log('[SettingsManager] Calling saveSettings...');
+        this.saveSettings();
     }
 
     adjustRange(option, dir) {
@@ -68,6 +99,7 @@ export class SettingsManager extends SubMenu {
         this.config[option.key] = parseFloat(val.toFixed(1));
         this.render();
         if (this.onUpdate) this.onUpdate(this.config);
+        this.saveSettings();
     }
 
     adjustSelect(option, dir) {
@@ -76,6 +108,7 @@ export class SettingsManager extends SubMenu {
         this.config[option.key] = option.values[nextIdx];
         this.render();
         if (this.onUpdate) this.onUpdate(this.config);
+        this.saveSettings();
     }
 
     renderItemContent(opt) {

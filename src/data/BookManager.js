@@ -48,12 +48,14 @@ export class BookManager {
     setCurrentPartContent(content) {
         if (this.book[this.currentPartKey]) {
             this.book[this.currentPartKey].content = content;
+            this.saveToStorage();
         }
     }
 
     setPartCursor(cursorIndex) {
         if (this.book[this.currentPartKey]) {
             this.book[this.currentPartKey].cursor = cursorIndex;
+            this.saveToStorage();
         }
     }
 
@@ -66,6 +68,7 @@ export class BookManager {
             content: "",
             cursor: 0
         };
+        this.saveToStorage();
         return true;
     }
 
@@ -83,6 +86,7 @@ export class BookManager {
                 this.book["0,0"] = { name: "Main", content: "", cursor: 0 };
             }
         }
+        this.saveToStorage();
         return true;
     }
 
@@ -108,5 +112,40 @@ export class BookManager {
 
     getAllParts() {
         return this.book;
+    }
+
+    // Persistence
+    saveToStorage() {
+        if (this.saveTimeout) clearTimeout(this.saveTimeout);
+        this.saveTimeout = setTimeout(() => {
+            try {
+                const data = {
+                    book: this.book,
+                    currentPartKey: this.currentPartKey,
+                    filename: this.filename
+                };
+                localStorage.setItem('crktqla_book', JSON.stringify(data));
+                console.log('[BookManager] Auto-saved book');
+            } catch (e) {
+                console.error('[BookManager] Save failed:', e);
+            }
+        }, 1000); // 1s Debounce
+    }
+
+    loadFromStorage() {
+        try {
+            const saved = localStorage.getItem('crktqla_book');
+            if (saved) {
+                const data = JSON.parse(saved);
+                if (data.book) this.book = data.book;
+                if (data.currentPartKey) this.currentPartKey = data.currentPartKey;
+                if (data.filename) this.filename = data.filename;
+                console.log('[BookManager] Loaded book from storage');
+                return true;
+            }
+        } catch (e) {
+            console.error('[BookManager] Load failed:', e);
+        }
+        return false;
     }
 }

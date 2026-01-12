@@ -18,7 +18,7 @@ export class InputDebugOverlay {
       white-space: pre;
     `;
         document.body.appendChild(this.element);
-        this.visible = true;
+        this.visible = false;
 
         // Subscribe to frame updates instead of polling
         this.gamepadManager.on('frame', (gp) => this.render(gp));
