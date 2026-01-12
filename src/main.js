@@ -210,7 +210,7 @@ function updateStatusText(mode) {
   if (mode === 'VISUAL_SELECT') {
     if (modeIcon) modeIcon.innerHTML = '<i class="fa-solid fa-eye"></i>';
     if (caseIcon) caseIcon.style.display = 'none';
-  } else if (mode === 'EDITOR') {
+  } else if (mode === 'EDITOR' || mode === 'RENAMING') {
     if (modeIcon) modeIcon.innerHTML = '<i class="fa-solid fa-border-none"></i>';
     if (caseIcon) caseIcon.style.display = 'flex';
   } else {
@@ -589,6 +589,10 @@ window.addEventListener('request-citation-insert', (e) => {
     bookManager.setCurrentPartContent(content);
     bookManager.setPartCursor(newCursor);
 
+    // CRITICAL: Sync TypingEngine so it knows about the inserted tag!
+    typingEngine.reset(content);
+    lastEngineTextLength = content.length;
+
     focusManager.setMode('EDITOR');
   } else {
     showNotification("No active part to link from.");
@@ -915,7 +919,7 @@ gamepadManager.on('frame', (gamepad) => {
       if (handledNav) {
         // ATOMIC CITATION SKIPPING:
         // If cursor landed inside a citation tag, snap it to the boundary based on direction.
-        const re = /\{\{cite:-?\d+,-?\d+\}\}/g;
+        const re = /\{\{cite:.*?\}\}/g;
         let match;
         while ((match = re.exec(content)) !== null) {
           const start = match.index;
@@ -1046,60 +1050,7 @@ gamepadManager.on('frame', (gamepad) => {
 
       gamepadManager.lastButtons = { ...frameInput.buttons }; // General tracking for EDITOR too
 
-      // ATOMIC CITATION DELETION
-      // 1. Backspace (LB)
-      if (frameInput.buttons.lb && !gamepadManager.lastButtons.lb && !isModifierHeld) {
-        // Check if cursor is after a citation }}
-        const before = content.slice(0, cursor);
-        if (before.endsWith('}}')) {
-          const openIdx = before.lastIndexOf('{{cite:');
-          if (openIdx !== -1) {
-            const tag = before.slice(openIdx);
-            // Verify it's a valid citation tag structure
-            if (/^\{\{cite:\d+,\d+\}\}$/.test(tag)) {
-              // Atomic Delete
-              const newContent = content.slice(0, openIdx) + content.slice(cursor);
-              bookManager.setCurrentPartContent(newContent);
-              bookManager.setPartCursor(openIdx);
 
-              part.content = newContent;
-              part.cursor = openIdx;
-              renderCustomEditor(part);
-              typingEngine.reset(newContent);
-              lastEngineTextLength = newContent.length;
-
-              gamepadManager.lastButtons = { ...frameInput.buttons };
-              break; // Skip rest of frame
-            }
-          }
-        }
-      }
-
-      // 2. Delete Forward (X)
-      if (frameInput.buttons.west && !gamepadManager.lastButtons.west) {
-        // Check if cursor is at start of {{cite:
-        if (content.slice(cursor).startsWith('{{cite:')) {
-          const after = content.slice(cursor);
-          const closeIdx = after.indexOf('}}');
-          if (closeIdx !== -1) {
-            const tag = after.slice(0, closeIdx + 2);
-            if (/^\{\{cite:\d+,\d+\}\}$/.test(tag)) {
-              // Atomic Delete
-              const newContent = content.slice(0, cursor) + content.slice(cursor + tag.length);
-              bookManager.setCurrentPartContent(newContent);
-              // Cursor stays same
-
-              part.content = newContent;
-              renderCustomEditor(part);
-              typingEngine.reset(newContent);
-              lastEngineTextLength = newContent.length;
-
-              gamepadManager.lastButtons = { ...frameInput.buttons };
-              break;
-            }
-          }
-        }
-      }
 
       // Typing Logic
       const state = typingEngine.processFrame(gamepad);
@@ -1110,7 +1061,25 @@ gamepadManager.on('frame', (gamepad) => {
           let newCursor = cursor;
 
           if (state.action === 'DELETE_FORWARD') {
-            if (cursor < content.length) {
+            // Check for Atomic Citation Deletion
+            const slice = content.slice(cursor);
+            let handledAtomic = false;
+            if (slice.startsWith('{{cite:')) {
+              const closeIdx = slice.indexOf('}}');
+              if (closeIdx !== -1) {
+                const tag = slice.slice(0, closeIdx + 2);
+                if (/^\{\{cite:.*?\}\}$/.test(tag)) {
+                  newContent = content.slice(0, cursor) + content.slice(cursor + tag.length);
+                  handledAtomic = true;
+                  // Cursor stays same
+
+                  typingEngine.reset(newContent);
+                  lastEngineTextLength = newContent.length;
+                }
+              }
+            }
+
+            if (!handledAtomic && cursor < content.length) {
               newContent = content.slice(0, cursor) + content.slice(cursor + 1);
             }
           } else if (state.action === 'DELETE_WORD_LEFT') {
@@ -1146,6 +1115,7 @@ gamepadManager.on('frame', (gamepad) => {
         // 2. Handle Delta Text (Inserts / Backspaces)
         const currentEngineText = state.text;
         const diff = currentEngineText.length - lastEngineTextLength;
+        let handledAtomic = false;
 
         if (diff !== 0) {
           let newContent = content;
@@ -1159,11 +1129,44 @@ gamepadManager.on('frame', (gamepad) => {
           } else {
             // Backspace (Standard, from Engine slice)
             // Engine did `text.slice(0, -1)`.
-            // We map this to "Backspace at Cursor"
-            const amount = -diff;
-            const start = Math.max(0, cursor - amount);
-            newContent = content.slice(0, start) + content.slice(cursor);
-            newCursor = start;
+            // Check for Atomic Citation Deletion
+            const before = content.slice(0, cursor);
+
+            if (before.endsWith('}}')) {
+              // Find start of current line to limit search scope
+              const lastNewline = before.lastIndexOf('\n');
+              const lineStart = lastNewline === -1 ? 0 : lastNewline + 1;
+              const currentLineBeforeCursor = before.slice(lineStart);
+
+              // Match regex at the END of the line segment
+              // We use $ to anchor to the end (which is the cursor position)
+              // We use permissive greedy matching for content but strictly within this string.
+              const match = currentLineBeforeCursor.match(/(\{\{cite:.*?\}\})$/);
+
+              if (match) {
+                const tag = match[1]; // The full tag string
+                const tagLen = tag.length;
+                const startIdx = cursor - tagLen;
+
+                // Atomic Delete
+                newContent = content.slice(0, startIdx) + content.slice(cursor);
+                newCursor = startIdx;
+                handledAtomic = true;
+
+                typingEngine.reset(newContent);
+                lastEngineTextLength = newContent.length;
+              }
+            }
+
+            if (!handledAtomic) {
+              // Standard Backspace
+              const amount = -diff;
+              const start = Math.max(0, cursor - amount);
+              newContent = content.slice(0, start) + content.slice(cursor);
+              newCursor = start;
+
+              // Do NOT reset engine here, standard flow is fine (engine state matches newContent)
+            }
           }
 
           bookManager.setCurrentPartContent(newContent);
@@ -1178,8 +1181,14 @@ gamepadManager.on('frame', (gamepad) => {
         // Render (Always, to show pending syllable)
         renderCustomEditor(part);
 
-        // Sync Length
-        lastEngineTextLength = currentEngineText.length;
+        // Check if we already updated length in atomic handler
+        if (!state.action && diff !== 0 && (typeof handledAtomic !== 'undefined' && handledAtomic)) {
+          // Do nothing, we already set lastEngineTextLength
+        } else {
+          // Sync Length standard
+          lastEngineTextLength = currentEngineText.length;
+        }
+
         visualizer.update(frameInput, state.mode, typingEngine.mappings, typingEngine.state.syllable);
       }
       break; // EDITOR case end
@@ -1496,10 +1505,26 @@ function renderCustomEditor(part, currentAnchor = selectionAnchor) {
     } else {
       let targetChar = postRaw.length > 0 ? postRaw[0] : ' ';
       let rest = postRaw.length > 0 ? postRaw.slice(1) : '';
+
+      // ATOMIC CITATION RENDERING
+      // If cursor is at start of a citation, treat the whole tag as the "targetChar"
+      if (postRaw.startsWith('{{cite:')) {
+        const match = /^\{\{cite:-?\d+,-?\d+\}\}/.exec(postRaw);
+        if (match) {
+          targetChar = match[0];
+          rest = postRaw.slice(targetChar.length);
+        }
+      }
+
       const targetHtml = safeEscape(targetChar);
       const restHtml = safeEscape(rest);
       const cursorClass = cursorType === 'BLOCK' ? 'cursor-block' : 'cursor-underline';
-      cursorHtml = `<span class="cursor ${cursorClass}">${targetHtml}</span>`;
+
+      // Add special class for citations to ensuring styling is clean (e.g. no-break)
+      const isCitation = targetChar.startsWith('{{cite:');
+      const extraClass = isCitation ? ' cursor-atomic' : '';
+
+      cursorHtml = `<span class="cursor ${cursorClass}${extraClass}">${targetHtml}</span>`;
       container.innerHTML = pre + pendingHtml + cursorHtml + restHtml;
     }
   }
@@ -1522,23 +1547,29 @@ function updateIndicators() {
   const state = typingEngine.state;
 
   if (mInd) {
-    let icon = '';
-    const leftLocked = state.leftStick?.locked;
-    const rightLocked = state.rightStick?.locked;
-    const isSelectionActive = leftLocked || rightLocked || state.syllable?.onset; // "Selected Consonant" mode
+    // Priority: FocusManager Mode
+    if (focusManager.mode === 'VISUAL_SELECT') {
+      mInd.innerHTML = '<i class="fa-solid fa-eye"></i>';
+    } else {
+      let icon = '';
+      const leftLocked = state.leftStick?.locked;
+      const rightLocked = state.rightStick?.locked;
+      const isSelectionActive = leftLocked || rightLocked || state.syllable?.onset; // "Selected Consonant" mode
 
-    switch (state.mode) {
-      case 'ONSET':
-        icon = isSelectionActive
-          ? '<i class="fa-regular fa-square"></i>'
-          : '<i class="fa-solid fa-border-none"></i>';
-        break;
-      case 'RIME_LEFT': icon = '<i class="fa-solid fa-square-caret-left"></i>'; break;
-      case 'RIME_RIGHT': icon = '<i class="fa-solid fa-square-caret-right"></i>'; break;
-      case 'PUNCTUATION': icon = '<i class="fa-solid fa-square-minus"></i>'; break;
-      default: icon = state.mode;
+      switch (state.mode) {
+
+        case 'ONSET':
+          icon = isSelectionActive
+            ? '<i class="fa-regular fa-square"></i>'
+            : '<i class="fa-solid fa-border-none"></i>';
+          break;
+        case 'RIME_LEFT': icon = '<i class="fa-solid fa-square-caret-left"></i>'; break;
+        case 'RIME_RIGHT': icon = '<i class="fa-solid fa-square-caret-right"></i>'; break;
+        case 'PUNCTUATION': icon = '<i class="fa-solid fa-square-minus"></i>'; break;
+        default: icon = state.mode;
+      }
+      mInd.innerHTML = icon;
     }
-    mInd.innerHTML = icon;
   }
 
   if (cInd) {

@@ -14,7 +14,7 @@ export class NavigationBar {
             'book-menu-btn'
         ];
 
-        this.selectedIndex = 0;
+        this.selectedIndex = this.items.length - 1; // Default to Book Menu (Far Right)
         this.isActive = false;
 
         this.lastNav = { left: false, right: false };
