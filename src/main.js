@@ -717,6 +717,9 @@ gamepadManager.on('frame', (gamepad) => {
       gridOverview.setLinkTarget(null);
     }
     focusManager.toggleOverview();
+    if (focusManager.mode === 'OVERVIEW') {
+      gridOverview.syncInputState(frameInput);
+    }
   }
 
 
@@ -738,8 +741,85 @@ gamepadManager.on('frame', (gamepad) => {
       break;
 
     case 'OVERVIEW':
+      const isMod = frameInput.buttons.north;
+
+      // Undo: Y (North) + Left Trigger
+      if (isMod && frameInput.buttons.lt && !gamepadManager.lastButtons?.lt) {
+        historyManager.undo().then(op => {
+          if (op) {
+            showNotification(`Undo: ${op.type} (To: ${op.navigateTo?.mode || 'EDITOR'})`);
+            if (op.navigateTo) {
+              if (bookManager.currentPartKey !== `${op.navigateTo.x},${op.navigateTo.y}`) {
+                bookManager.selectPart(op.navigateTo.x, op.navigateTo.y);
+              }
+              if (op.navigateTo.mode) {
+                focusManager.setMode(op.navigateTo.mode);
+                if (op.navigateTo.mode === 'OVERVIEW') {
+                  gridOverview.setCursor(op.navigateTo.x, op.navigateTo.y);
+                  gridOverview.syncInputState(frameInput);
+                  gridOverview.ignoreNextRename = true;
+                  gridOverview.updateView(true);
+                }
+              }
+            }
+            // Sync Engine regardless (for safe transition)
+            const p = bookManager.getCurrentPart();
+            if (p) {
+              typingEngine.reset(p.content);
+              lastEngineTextLength = p.content.length;
+              renderCustomEditor(p);
+            }
+          } else {
+            showNotification("Nothing to Undo");
+          }
+        });
+        gamepadManager.lastButtons.lt = true; // Consume
+        // Don't update lastButtons fully here, let falling through handle it?
+        // Actually we want to return or continue?
+        // If we set lastButtons here we need to be careful.
+        // Let's just return to skip gridOverview input this frame.
+        gamepadManager.lastButtons = { ...frameInput.buttons };
+        break;
+      }
+
+      // Redo: Y (North) + Right Trigger
+      if (isMod && frameInput.buttons.rt && !gamepadManager.lastButtons?.rt) {
+        historyManager.redo().then(op => {
+          if (op) {
+            showNotification(`Redo: ${op.type}`);
+            if (op.navigateTo) {
+              if (bookManager.currentPartKey !== `${op.navigateTo.x},${op.navigateTo.y}`) {
+                bookManager.selectPart(op.navigateTo.x, op.navigateTo.y);
+              }
+              if (op.navigateTo.mode) {
+                focusManager.setMode(op.navigateTo.mode);
+                if (op.navigateTo.mode === 'OVERVIEW') {
+                  gridOverview.setCursor(op.navigateTo.x, op.navigateTo.y);
+                  gridOverview.syncInputState(frameInput);
+                  gridOverview.ignoreNextRename = true;
+                  gridOverview.updateView(true);
+                }
+              }
+            }
+            const p = bookManager.getCurrentPart();
+            if (p) {
+              typingEngine.reset(p.content);
+              lastEngineTextLength = p.content.length;
+              renderCustomEditor(p);
+            }
+          } else {
+            showNotification("Nothing to Redo");
+          }
+        });
+        gamepadManager.lastButtons = { ...frameInput.buttons };
+        break;
+      }
+
       // Route all input to GridOverview
       gridOverview.handleInput(frameInput);
+
+      // Update Global State Tracker for Edge Detection
+      gamepadManager.lastButtons = { ...frameInput.buttons };
 
       break;
 
