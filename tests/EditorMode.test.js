@@ -133,12 +133,29 @@ describe('EditorMode', () => {
     });
 
     it('activates visual select on Y + RB', () => {
+        // Add onVisualSelect to instance
+        editorMode.onVisualSelect = vi.fn();
+
         const frameInput = {
             buttons: { rb: true, north: true, dpad: {} }
         };
 
         editorMode.handleInput(frameInput, {});
-        expect(mocks.focusManager.setMode).toHaveBeenCalledWith('VISUAL_SELECT');
-        expect(editorMode.selectionAnchor).not.toBeNull();
+        expect(editorMode.onVisualSelect).toHaveBeenCalledWith(5); // Cursor 5
+    });
+
+    it('trigger paste on Y + L3', () => {
+        // Spy on internal paste method
+        vi.spyOn(editorMode, 'paste').mockImplementation(() => { });
+
+        // Mode ONSET required
+        mocks.typingEngine.state.mode = 'ONSET';
+
+        const frameInput = {
+            buttons: { l3: true, north: true, dpad: {} }
+        };
+
+        editorMode.handleInput(frameInput, {});
+        expect(editorMode.paste).toHaveBeenCalled();
     });
 });

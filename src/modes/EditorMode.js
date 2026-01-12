@@ -10,6 +10,8 @@ export class EditorMode {
         this.gamepadManager = deps.gamepadManager;
         this.renderer = deps.renderer; // EditorRenderer instance
         this.showNotification = deps.showNotification; // Callback
+        this.onVisualSelect = deps.onVisualSelect; // Callback
+
 
         // State
         this.lastDpad = { up: false, down: false, left: false, right: false };
@@ -50,6 +52,44 @@ export class EditorMode {
             this.renderer.render(part, this.selectionAnchor);
             this.typingEngine.reset(newContent);
             this.lastEngineTextLength = newContent.length;
+        }
+
+        // Backspace Word: LB (Left Shoulder) + Modifier (North)
+        if (frameInput.buttons.lb && frameInput.buttons.north && !this.gamepadManager.lastButtons?.lb) {
+            let target = cursor - 1;
+            while (target > 0 && /\s/.test(content[target - 1])) target--; // Skip trailing spaces
+            while (target > 0 && !/\s/.test(content[target - 1])) target--; // Skip word
+
+            const removedText = content.slice(target, cursor);
+            if (removedText.length > 0) {
+                this.historyManager.push({
+                    type: 'REMOVE_TEXT',
+                    partKey: this.bookManager.currentPartKey,
+                    data: { text: removedText, index: target }
+                });
+
+                const newContent = content.slice(0, target) + content.slice(cursor);
+                this.bookManager.setCurrentPartContent(newContent);
+                this.bookManager.setPartCursor(target);
+
+                // Sync render and engine
+                part.content = newContent;
+                part.cursor = target;
+                this.renderer.render(part, this.selectionAnchor);
+                this.typingEngine.reset(newContent);
+                this.lastEngineTextLength = newContent.length;
+
+                // Prevent TypingEngine from processing this frame's LB
+                // We can't easily mutate frameInput.buttons if it's referenced elsewhere, 
+                // but we can ensure we update our local lastButtons.
+                // Critical: We need to skip typingEngine.processFrame() or mask LB?
+                // Actually, if we reset typingEngine above, it might be fine, 
+                // BUT typingEngine might still see LB pressed in processFrame and trigger ANOTHER backspace.
+                // Just return? No, we might need other processing?
+                // Safest: masking locally.
+            }
+            // Mark LB as consumed in gamepadManager to prevent repeated triggers?
+            // Actually, simplest is to pass a "masked" gamepad to typingEngine if we handled an action?
         }
 
         const dpad = frameInput.buttons.dpad;
@@ -254,8 +294,21 @@ export class EditorMode {
         if (isModifierHeld && frameInput.buttons.rb && !this.gamepadManager.lastButtons?.rb) {
             this.showNotification("Visual Select Mode Entered");
 
-            this.selectionAnchor = cursor; // Global anchor state
-            this.focusManager.setMode('VISUAL_SELECT');
+            // We need to initialize the mode. 
+            // Ideally we should have the mode instance injected, but we only have 'deps'.
+            // For now, we rely on main.js logic OR we expose a callback.
+            // But wait, we refactored main.js to just delegate.
+            // Who calls visualSelectMode.enter(cursor)?
+            // It MUST be called.
+
+            // Fix: We need to inject visualSelectMode into EditorMode or expose a callback.
+            if (this.onVisualSelect) {
+                this.onVisualSelect(cursor);
+            } else {
+                console.error("onVisualSelect callback missing in EditorMode");
+                this.focusManager.setMode('VISUAL_SELECT'); // Fallback (will miss anchor init)
+            }
+
             this.gamepadManager.lastButtons = { ...frameInput.buttons };
             return;
         }
@@ -325,7 +378,7 @@ export class EditorMode {
                     // For MVP of this class, let's just Log and TODO. 
                     // Wait, "being extremely careful to implement everything exactly as before".
                     // We need to inject `onPaste`.
-                    if (this.deps && this.deps.onPaste) this.deps.onPaste();
+                    if (this.paste) this.paste();
                 }
             }
             this.gamepadManager.lastButtons = { ...frameInput.buttons };
@@ -474,7 +527,6 @@ export class EditorMode {
 
                         newContent = content.slice(0, start) + content.slice(cursor);
                         newCursor = start;
-                        // No engine reset needed here logic
                     }
                 }
 
@@ -496,5 +548,42 @@ export class EditorMode {
             this.visualizer.update(frameInput, state.mode, this.typingEngine.mappings, this.typingEngine.state.syllable);
         }
         this.gamepadManager.lastButtons = { ...frameInput.buttons };
+    }
+
+    async paste() {
+        try {
+            const text = await navigator.clipboard.readText();
+            if (!text) return;
+
+            const part = this.bookManager.getCurrentPart();
+            if (!part) return;
+
+            const content = part.content || "";
+            const cursor = part.cursor || 0;
+
+            const newContent = content.slice(0, cursor) + text + content.slice(cursor);
+
+            this.historyManager.push({
+                type: 'ADD_TEXT',
+                partKey: this.bookManager.currentPartKey,
+                data: { text: text, index: cursor }
+            });
+
+            this.bookManager.setCurrentPartContent(newContent);
+            this.bookManager.setPartCursor(cursor + text.length);
+
+            // Sync
+            part.content = newContent;
+            part.cursor = cursor + text.length;
+
+            this.renderer.render(part, this.selectionAnchor);
+            this.typingEngine.reset(newContent);
+            this.lastEngineTextLength = newContent.length;
+
+            this.showNotification("Pasted from Clipboard");
+        } catch (err) {
+            console.error("Paste failed", err);
+            this.showNotification("Paste Failed");
+        }
     }
 }

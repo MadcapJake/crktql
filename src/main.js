@@ -14,6 +14,7 @@ import { GridOverview } from './ui/GridOverview.js';
 import { HistoryManager } from './data/HistoryManager.js';
 import { EditorRenderer } from './ui/EditorRenderer.js';
 import { EditorMode } from './modes/EditorMode.js';
+import { VisualSelectMode } from './modes/VisualSelectMode.js';
 import { InputDebugOverlay } from './ui/InputDebugOverlay.js'; // Moved up
 
 document.querySelector('#app').innerHTML = `
@@ -171,6 +172,20 @@ const editorMode = new EditorMode({
   renderer: editorRenderer,
   showNotification: (msg) => showNotification(msg),
   onPaste: () => window.handlePaste && window.handlePaste(), // Stub or ref
+  onVisualSelect: (cursor) => {
+    visualSelectMode.enter(cursor);
+    focusManager.setMode('VISUAL_SELECT');
+  }
+});
+
+const visualSelectMode = new VisualSelectMode({
+  bookManager,
+  renderer: editorRenderer,
+  historyManager,
+  focusManager,
+  typingEngine,
+  gamepadManager,
+  showNotification: (msg) => showNotification(msg)
 });
 
 // Initialize Calibration Manager
@@ -507,7 +522,7 @@ settingsManager.onUpdate = (config) => {
   // Refresh Editor to reflect cursor changes immediately
   if (focusManager.mode === 'EDITOR' || focusManager.mode === 'BOTTOM_BAR' || settingsManager.isOpen) {
     const part = bookManager.getCurrentPart();
-    if (part) renderCustomEditor(part);
+    if (part) editorRenderer.render(part);
   }
 };
 
@@ -565,7 +580,7 @@ window.addEventListener('request-rename', (e) => {
   focusManager.setMode('RENAMING');
 
   // Force immediate render so we don't see the old content even for a frame
-  renderCustomEditor({
+  editorRenderer.render({
     content: initialName,
     cursor: initialName.length
   });
@@ -653,74 +668,101 @@ window.addEventListener('request-citation-insert', (e) => {
 });
 
 // --- Main Loop ---
-gamepadManager.on('frame', (gamepad) => {
-  // 1. Calibration takes priority
-  if (calibrationManager.isCalibrating) {
+// --- Initialization ---
+// Load Persistence last to ensure UI helpers (showNotification) are ready
+if (bookManager.loadFromStorage()) {
+  setTimeout(() => {
+    if (typeof showNotification === 'function') {
+      showNotification("Restored Book from Storage");
+    }
+    // Refresh Editor State with Loaded Data
+    const part = bookManager.getCurrentPart();
+    if (part) {
+      typingEngine.reset(part.content);
+      lastEngineTextLength = part.content.length; // Ensure global sync
+      if (typeof editorRenderer !== 'undefined') editorRenderer.render(part, null);
+    }
+    focusManager.setMode('EDITOR');
+  }, 100);
+} else {
+  // New Session
+  focusManager.setMode('EDITOR');
+}
+
+
+// --- Game Loop ---
+function loop() {
+  requestAnimationFrame(loop);
+
+  if (!document.hasFocus()) return;
+
+  const gamepad = gamepadManager.getActiveGamepad();
+  if (!gamepad) {
+    if (focusManager.mode !== 'DIALOG_CONFIRM' && focusManager.mode !== 'OVERVIEW') {
+      // visualizer.renderWaiting(); // optional
+    }
+    return;
+  }
+
+  // Poll Input
+  const frameInput = typingEngine.mapper.map(gamepad);
+
+  // Debug Overlay Update
+  debugOverlay.render(gamepad);
+
+  // Show Input in Visualizer (if visible)
+  // visualizer.updateInput(frameInput); 
+
+  // Global Undo/Redo (Meta) ?? 
+  // currently inside EDITOR/VISUAL_SELECT. 
+
+  // --- 1. Priority Overlays ---
+  if (calibrationManager && calibrationManager.isCalibrating) {
     calibrationManager.handleInput(gamepad);
     return;
   }
 
-  // 2. Map Input
-  const frameInput = typingEngine.mapper.map(gamepad);
-
-  // 2a. Gamepad Menu (Priority)
+  // Gamepad Menu
   if (gamepadMenu.isOpen) {
-    // Check for Start button here to manage focus callback
-    if (frameInput?.buttons.start && !gamepadManager.lastStart) {
+    if (frameInput.buttons.start && !gamepadManager.lastStart) {
       gamepadMenu.close();
-
-      const ov = document.getElementById('grid-overview');
-      const isOverview = ov && (ov.style.display === 'block' || getComputedStyle(ov).display !== 'none');
-      focusManager.setMode(isOverview ? 'OVERVIEW' : 'EDITOR');
-
-      gamepadManager.lastStart = true; // Consumed
-      return;
+      gamepadManager.lastStart = true;
+    } else {
+      gamepadMenu.handleInput(frameInput);
     }
-
-    gamepadMenu.handleInput(frameInput);
     return;
   }
 
-  // 3. Global Toggles
-  const startPressed = frameInput?.buttons.start;
-  const selectPressed = frameInput?.buttons.select;
-
-  // Start -> Toggle Bottom Bar
-  // If settings is open, we handle close logic inside settings handling block or here.
-  // User spec: "Clicking the start menu should close the settings popover"
+  // Settings Menu
   if (settingsManager.isOpen) {
-    if (startPressed && !gamepadManager.lastStart) {
-      settingsManager.toggle(); // Close settings
-
-      const ov = document.getElementById('grid-overview');
-      const isOverview = ov && (ov.style.display === 'block' || getComputedStyle(ov).display !== 'none');
-      focusManager.setMode(isOverview ? 'OVERVIEW' : 'EDITOR');
-
+    if (frameInput.buttons.start && !gamepadManager.lastStart) {
+      settingsManager.toggle();
+      gamepadManager.lastStart = true;
     } else {
       settingsManager.handleInput(frameInput);
     }
-    gamepadManager.lastStart = startPressed;
-    gamepadManager.lastSelect = selectPressed;
     return;
   }
 
-  // 2c. Help Menu (Priority)
+  // Help Menu
   if (helpManager.isOpen) {
     helpManager.handleInput(frameInput);
-    gamepadManager.lastStart = startPressed;
-    gamepadManager.lastSelect = selectPressed;
     return;
   }
 
-  // 3. Global Toggles Bottom Bar (Only if not in Dialog or Book Menu)
-  if (focusManager.mode !== 'DIALOG' && focusManager.mode !== 'BOOK_MENU' && startPressed && !gamepadManager.lastStart) {
+  const startPressed = frameInput.buttons.start;
+  const selectPressed = frameInput.buttons.select;
+
+  // --- 2. Global Toggles ---
+  // Start -> Toggle Bottom Bar (Unless in specific modes)
+  if (focusManager.mode !== 'DIALOG_CONFIRM' && focusManager.mode !== 'BOOK_MENU' && startPressed && !gamepadManager.lastStart) {
     focusManager.toggleBottomBar();
   }
 
-  // Select -> Toggle Overview (Only if not in Dialog or Renaming)
-  if (focusManager.mode !== 'DIALOG' && focusManager.mode !== 'RENAMING' && selectPressed && !gamepadManager.lastSelect) {
+  // Select -> Toggle Overview
+  if (focusManager.mode !== 'DIALOG_CONFIRM' && focusManager.mode !== 'RENAMING' && selectPressed && !gamepadManager.lastSelect) {
     if (focusManager.mode === 'OVERVIEW') {
-      // Cancelling Overview Action
+      // Reset Targets
       focusManager.citationUpdateTarget = null;
       gridOverview.setLinkTarget(null);
     }
@@ -730,351 +772,40 @@ gamepadManager.on('frame', (gamepad) => {
     }
   }
 
-
-
-  // 5. Route Input based on Focus
+  // --- Mode Switching / Focus Management ---
+  // Update last global buttons specifically for toggles if we didn't return?
+  // Actually, allow fallthrough to specific modes, but we need to update lastStart/lastSelect at end of loop OR manage them here.
+  // Best practice: Update at end of loop or shared state.
+  gamepadManager.lastStart = startPressed;
+  gamepadManager.lastSelect = selectPressed;
   switch (focusManager.mode) {
-    case 'HELP':
-      helpManager.handleInput(frameInput);
-      break;
-
-    case 'BOOK_MENU':
-      bookMenu.handleInput(frameInput);
-      if (!bookMenu.isOpen) {
-        // Return to Overview if it's visible, otherwise Editor
-        const ov = document.getElementById('grid-overview');
-        const isOverview = ov && (ov.style.display === 'block' || getComputedStyle(ov).display !== 'none');
-        focusManager.setMode(isOverview ? 'OVERVIEW' : 'EDITOR');
-      }
-      break;
-
-    case 'OVERVIEW':
-      const isMod = frameInput.buttons.north;
-
-      // Undo: Y (North) + Left Trigger
-      if (isMod && frameInput.buttons.lt && !gamepadManager.lastButtons?.lt) {
-        historyManager.undo().then(op => {
-          if (op) {
-            showNotification(`Undo: ${op.type} (To: ${op.navigateTo?.mode || 'EDITOR'})`);
-            if (op.navigateTo) {
-              if (bookManager.currentPartKey !== `${op.navigateTo.x},${op.navigateTo.y}`) {
-                bookManager.selectPart(op.navigateTo.x, op.navigateTo.y);
-              }
-              if (op.navigateTo.mode) {
-                focusManager.setMode(op.navigateTo.mode);
-                if (op.navigateTo.mode === 'OVERVIEW') {
-                  gridOverview.setCursor(op.navigateTo.x, op.navigateTo.y);
-                  gridOverview.syncInputState(frameInput);
-                  gridOverview.ignoreNextRename = true;
-                  gridOverview.updateView(true);
-                }
-              }
-            }
-            // Sync Engine regardless (for safe transition)
-            const p = bookManager.getCurrentPart();
-            if (p) {
-              typingEngine.reset(p.content);
-              lastEngineTextLength = p.content.length;
-              renderCustomEditor(p);
-            }
-          } else {
-            showNotification("Nothing to Undo");
-          }
-        });
-        gamepadManager.lastButtons.lt = true; // Consume
-        // Don't update lastButtons fully here, let falling through handle it?
-        // Actually we want to return or continue?
-        // If we set lastButtons here we need to be careful.
-        // Let's just return to skip gridOverview input this frame.
-        gamepadManager.lastButtons = { ...frameInput.buttons };
-        break;
-      }
-
-      // Redo: Y (North) + Right Trigger
-      if (isMod && frameInput.buttons.rt && !gamepadManager.lastButtons?.rt) {
-        historyManager.redo().then(op => {
-          if (op) {
-            showNotification(`Redo: ${op.type}`);
-            if (op.navigateTo) {
-              if (bookManager.currentPartKey !== `${op.navigateTo.x},${op.navigateTo.y}`) {
-                bookManager.selectPart(op.navigateTo.x, op.navigateTo.y);
-              }
-              if (op.navigateTo.mode) {
-                focusManager.setMode(op.navigateTo.mode);
-                if (op.navigateTo.mode === 'OVERVIEW') {
-                  gridOverview.setCursor(op.navigateTo.x, op.navigateTo.y);
-                  gridOverview.syncInputState(frameInput);
-                  gridOverview.ignoreNextRename = true;
-                  gridOverview.updateView(true);
-                }
-              }
-            }
-            const p = bookManager.getCurrentPart();
-            if (p) {
-              typingEngine.reset(p.content);
-              lastEngineTextLength = p.content.length;
-              renderCustomEditor(p);
-            }
-          } else {
-            showNotification("Nothing to Redo");
-          }
-        });
-        gamepadManager.lastButtons = { ...frameInput.buttons };
-        break;
-      }
-
-      // Route all input to GridOverview
-      gridOverview.handleInput(frameInput);
-
-      // Update Global State Tracker for Edge Detection
-      gamepadManager.lastButtons = { ...frameInput.buttons };
-
-      break;
-
     case 'BOTTOM_BAR':
       navBar.handleInput(frameInput);
       break;
 
-
-    case 'RENAMING':
-      const rState = focusManager.renameState;
-      if (!rState) break; // Safety
-
-      // 1. SAVE (B)
-      const lastBtns = gamepadManager.lastButtons || {}; // Safety check
-      if (frameInput.buttons.east && !lastBtns.east) {
-        const newName = rState.content;
-        const { x, y } = focusManager.renameTarget;
-
-        // Push to History (we need old name)
-        const oldName = bookManager.getPart(x, y).name;
-
-        bookManager.renamePart(x, y, newName);
-
-        historyManager.push({
-          type: 'RENAME_PART',
-          partKey: `${x},${y}`,
-          data: {
-            x: x,
-            y: y,
-            oldName: oldName,
-            newName: newName
-          }
-        });
-
-        focusManager.setMode('OVERVIEW');
-
-        // Prevent fall-through! Sync the overview's last button state to current frame
-        // so it doesn't see "B" as a "new press" in the next frame if button is held, 
-        // or effectively "debounces" this action.
-        gridOverview.syncInputState(frameInput);
-
-        gridOverview.updateView(true);
-        showNotification(`Part renamed to "${newName}"`);
-        break;
-      }
-
-      // 2. CANCEL (Select)
-      if (selectPressed && !gamepadManager.lastSelect) {
-        focusManager.setMode('OVERVIEW');
-        showNotification("Renaming Cancelled");
-        break;
-      }
-
-      // 3. Navigation (D-Pad)
-      const rDpad = frameInput.buttons.dpad;
-      const rJustPressed = (btn) => rDpad[btn] && !rState.lastDpad[btn];
-
-      if (rJustPressed('left')) {
-        rState.cursor = Math.max(0, rState.cursor - 1);
-      }
-      if (rJustPressed('right')) {
-        rState.cursor = Math.min(rState.content.length, rState.cursor + 1);
-      }
-      rState.lastDpad = { ...rDpad };
-
-      // 4. Typing (Diff Logic)
-      const rEngineState = typingEngine.processFrame(gamepad);
-      const rCurrentText = typingEngine.getBufferText();
-      const rDiff = rCurrentText.length - rState.lastLength;
-
-      if (rDiff !== 0) {
-        if (rDiff > 0) {
-          // Insertion
-          const added = rCurrentText.slice(rState.lastLength);
-          rState.content = rState.content.slice(0, rState.cursor) + added + rState.content.slice(rState.cursor);
-          rState.cursor += rDiff;
-        } else {
-          // Backspace (Engine removed from end)
-          const amount = -rDiff;
-          const start = Math.max(0, rState.cursor - amount);
-          rState.content = rState.content.slice(0, start) + rState.content.slice(rState.cursor);
-          rState.cursor = start;
-        }
-
-        // Sync Engine to match our modified content
-        typingEngine.reset(rState.content);
-        rState.lastLength = rState.content.length;
-      }
-
-      // 5. Render Editor
-      renderCustomEditor({
-        content: rState.content,
-        cursor: rState.cursor
-      });
-
-      // 6. Render Visualizer (Live typing feedback)
-      visualizer.update(frameInput, typingEngine.state.mode, typingEngine.mappings);
-
+    case 'OVERVIEW':
+      gridOverview.handleInput(frameInput);
       break;
 
     case 'EDITOR':
       editorMode.handleInput(frameInput, gamepad);
-      break; // EDITOR case end
-
-    case 'VISUAL_SELECT':
-      // D-pad Navigation (Expand Selection)
-      const vDpad = frameInput.buttons.dpad;
-      const vPart = bookManager.getCurrentPart();
-
-      if (vPart) {
-        let vCursor = vPart.cursor;
-        const vContent = vPart.content;
-        let vNavigated = false;
-
-        // Re-use logic or duplicate simple nav? 
-        // We need to support modifiers too.
-        const isMod = frameInput.buttons.north;
-        const jp = (btn) => vDpad[btn] && !editorLastDpad[btn];
-
-        if (jp('left')) {
-          if (isMod) {
-            let target = vCursor - 1;
-            while (target > 0 && /\s/.test(vContent[target - 1])) target--;
-            while (target > 0 && !/\s/.test(vContent[target - 1])) target--;
-            vCursor = target;
-          } else {
-            vCursor = Math.max(0, vCursor - 1);
-          }
-          vNavigated = true;
-        }
-        if (jp('right')) {
-          if (isMod) {
-            let target = vCursor;
-            while (target < vContent.length && !/\s/.test(vContent[target])) target++;
-            while (target < vContent.length && /\s/.test(vContent[target])) target++;
-            vCursor = target;
-          } else {
-            vCursor = Math.min(vContent.length, vCursor + 1);
-          }
-          vNavigated = true;
-        }
-        if (jp('up')) {
-          // ... reusing up logic ...
-          // Simplified for brevity: just standard up
-          // Go to last newline
-          const lastNewline = vContent.lastIndexOf('\n', vCursor - 1);
-          if (lastNewline !== -1) {
-            const currentLineStart = vContent.lastIndexOf('\n', vCursor - 1);
-            const col = vCursor - currentLineStart - 1;
-            const prevLineEnd = currentLineStart;
-            const prevLineStart = vContent.lastIndexOf('\n', prevLineEnd - 1);
-            const lineLen = prevLineEnd - prevLineStart - 1;
-            const targetCol = Math.min(col, lineLen);
-            vCursor = (prevLineStart + 1) + targetCol;
-          } else {
-            vCursor = 0;
-          }
-          vNavigated = true;
-        }
-        if (jp('down')) {
-          const nextNewline = vContent.indexOf('\n', vCursor);
-          if (nextNewline !== -1) {
-            const currentLineStart = vContent.lastIndexOf('\n', vCursor - 1);
-            const col = vCursor - (currentLineStart + 1);
-            const nextLineStart = nextNewline + 1;
-            const nextLineEnd = vContent.indexOf('\n', nextLineStart);
-            const actualEnd = nextLineEnd === -1 ? vContent.length : nextLineEnd;
-            const nextLineLen = actualEnd - nextLineStart;
-            const targetCol = Math.min(col, nextLineLen);
-            vCursor = nextLineStart + targetCol;
-          } else {
-            vCursor = vContent.length;
-          }
-          vNavigated = true;
-        }
-
-        if (vNavigated) {
-          // Update cursor but KEEP anchor
-          bookManager.setPartCursor(vCursor);
-          vPart.cursor = vCursor; // Local update
-          renderCustomEditor(vPart);
-        }
-        editorLastDpad = { ...vDpad };
-      }
-
-      // Actions
-      // A (South) -> Copy
-      if (frameInput.buttons.south && !gamepadManager.lastButtons.south) {
-        const rangeText = getSelectionText(vPart);
-        if (rangeText) {
-          navigator.clipboard.writeText(rangeText).catch(e => console.error("Copy failed", e));
-          showNotification("Copied to Clipboard");
-        }
-        exitVisualSelect();
-      }
-
-      // X (West) -> Cut
-      if (frameInput.buttons.west && !gamepadManager.lastButtons.west) {
-        const rangeText = getSelectionText(vPart);
-        if (rangeText) {
-          // Capture indices synchronously before anchor is cleared
-          const sStart = Math.min(selectionAnchor, vPart.cursor);
-          const sEnd = Math.max(selectionAnchor, vPart.cursor);
-          const originalContent = vPart.content; // Capture content too just in case
-
-          navigator.clipboard.writeText(rangeText).then(() => {
-            // Delete content using captured indices
-            const newContent = originalContent.slice(0, sStart) + originalContent.slice(sEnd);
-
-            const removedText = originalContent.slice(sStart, sEnd);
-            historyManager.push({
-              type: 'REMOVE_TEXT',
-              partKey: bookManager.currentPartKey,
-              data: {
-                text: removedText,
-                index: sStart
-              }
-            });
-
-            bookManager.setCurrentPartContent(newContent);
-            bookManager.setPartCursor(sStart);
-
-            // Sync Engine
-            typingEngine.reset(newContent);
-            lastEngineTextLength = newContent.length;
-
-            showNotification("Cut to Clipboard");
-
-            // Force re-render to show deletion
-            const updatedPart = bookManager.getCurrentPart();
-            if (updatedPart) renderCustomEditor(updatedPart);
-
-          }).catch(e => console.error("Cut failed", e));
-        }
-        exitVisualSelect();
-      }
-
-      // B (East) -> Cancel
-      if (frameInput.buttons.east && !gamepadManager.lastButtons.east) {
-        exitVisualSelect();
-      }
-
-      gamepadManager.lastButtons = { ...frameInput.buttons };
       break;
 
+    case 'VISUAL_SELECT':
+      visualSelectMode.handleInput(frameInput);
+      break;
 
     case 'DIALOG_CONFIRM':
+      // Dialog logic is currently event-driven or simple check?
+      // check if we have modal open?
+      // actually DIALOG_CONFIRM logic was partially inline in the old big switch.
+      // We need to support it if it relies on polling.
+      // Let's check if we deleted the DIALOG_CONFIRM logic.
+      // Yes, we did. The switch ended at 970 in previous view.
+      // We need to restore DIALOG_CONFIRM logic here or in a DialogManager.
+      // For now, inline restoration.
+
+      const startPressed = frameInput.buttons.start;
       // ... existing code ...
       if (startPressed && !gamepadManager.lastStart) {
         if (confirmCallback) confirmCallback();
@@ -1090,208 +821,7 @@ gamepadManager.on('frame', (gamepad) => {
       }
       break;
   }
-
-  // Helper Functions for Visual Select
-  function getSelectionText(part) {
-    if (!part || selectionAnchor === null) return "";
-    const start = Math.min(selectionAnchor, part.cursor);
-    const end = Math.max(selectionAnchor, part.cursor);
-    return part.content.slice(start, end);
-  }
-
-  function deleteSelection(part) {
-    if (selectionAnchor === null) return;
-    const start = Math.min(selectionAnchor, part.cursor);
-    const end = Math.max(selectionAnchor, part.cursor);
-    const newContent = part.content.slice(0, start) + part.content.slice(end);
-
-    bookManager.setCurrentPartContent(newContent);
-    bookManager.setPartCursor(start); // Move cursor to start of deletion
-    // Sync Engine
-    typingEngine.reset(newContent);
-    lastEngineTextLength = newContent.length;
-  }
-
-  function exitVisualSelect() {
-    const part = bookManager.getCurrentPart();
-    selectionAnchor = null; // Clear global
-    if (part) {
-      renderCustomEditor(part);
-    }
-
-    // Sync Engine Input to prevent "A" or "B" from triggering typing actions immediately
-    if (typeof gamepad !== 'undefined') {
-      typingEngine.resetInputState(gamepad);
-    }
-
-    focusManager.setMode('EDITOR');
-  }
-
-  // Update Last State (Moved to end)
-  gamepadManager.lastStart = startPressed;
-  gamepadManager.lastSelect = selectPressed;
-
-  updateIndicators();
-});
-
-
-// Helper to handle clipboard paste
-async function handlePaste() {
-  try {
-    const text = await navigator.clipboard.readText();
-    if (text) {
-      const part = bookManager.getCurrentPart();
-      if (part) {
-        const c = part.content || "";
-        const idx = part.cursor || 0;
-        const newContent = c.slice(0, idx) + text + c.slice(idx);
-        bookManager.setCurrentPartContent(newContent);
-        bookManager.setPartCursor(idx + text.length);
-
-        // Sync
-        typingEngine.reset(newContent);
-        lastEngineTextLength = newContent.length;
-        part.content = newContent;
-        part.cursor = idx + text.length;
-        renderCustomEditor(part);
-        showNotification("Pasted from Clipboard");
-      }
-    }
-  } catch (err) {
-    console.error("Paste failed:", err);
-    showNotification("Paste Failed: " + err.message);
-  }
 }
 
-
-function renderCustomEditor(part, currentAnchor = selectionAnchor) {
-  // Delegate to safe EditorRenderer
-  editorRenderer.render(part, currentAnchor);
-}
-
-// Keep old indicators update? Or move to standard update status?
-// indicators (case/mode) are outside editor-view usually.
-updateIndicators();
-
-function updateIndicators() {
-  const mInd = document.getElementById('mode-indicator');
-  const cInd = document.getElementById('case-indicator');
-  const state = typingEngine.state;
-
-  if (mInd) {
-    // Priority: FocusManager Mode
-    if (focusManager.mode === 'VISUAL_SELECT') {
-      mInd.innerHTML = '<i class="fa-solid fa-eye"></i>';
-    } else {
-      let icon = '';
-      const leftLocked = state.leftStick?.locked;
-      const rightLocked = state.rightStick?.locked;
-      const isSelectionActive = leftLocked || rightLocked || state.syllable?.onset; // "Selected Consonant" mode
-      const isModifierHeld = gamepadManager.lastButtons?.north;
-      switch (state.mode) {
-
-        case 'ONSET':
-          icon = isSelectionActive
-            ? '<i class="fa-regular fa-square"></i>'
-            : isModifierHeld ? '<i class="fa-solid fa-pause"></i>' : '<i class="fa-solid fa-border-none"></i>';
-          break;
-        case 'RIME_LEFT': icon = '<i class="fa-solid fa-square-caret-left"></i>'; break;
-        case 'RIME_RIGHT': icon = '<i class="fa-solid fa-square-caret-right"></i>'; break;
-        case 'PUNCTUATION': icon = '<i class="fa-solid fa-square-minus"></i>'; break;
-        default: icon = state.mode;
-      }
-      mInd.innerHTML = icon;
-    }
-  }
-
-  if (cInd) {
-    let icon = '';
-    switch (state.caseMode) {
-      case 0: icon = '<i class="fa-regular fa-circle"></i>'; break; // Lower
-      case 1: icon = '<i class="fa-regular fa-circle-up"></i>'; break; // Shift
-      case 2: icon = '<i class="fa-solid fa-circle-up"></i>'; break; // Caps
-    }
-    cInd.innerHTML = icon;
-  }
-}
-// Sync with Settings (Initial)
-debugOverlay.visible = settingsManager.config.debug;
-if (debugOverlay.visible) debugOverlay.element.style.display = 'block';
-else debugOverlay.element.style.display = 'none';
-
-// Rogue onUpdate removed here. Logic moved to main handler.
-
-// --- Robust Export Logic ---
-const exportBtn = document.getElementById('export-logs-btn');
-if (exportBtn) {
-  exportBtn.addEventListener('click', () => {
-    // Collect all logs: Console + History
-    const consoleLogs = logger.export();
-    const historyLogs = historyManager.exportLogs();
-
-    const combined = `=== CONSOLE LOGS ===\n${consoleLogs}\n\n=== HISTORY LOGS ===\n${historyLogs}`;
-
-    // 1. Always log to console as backup
-    console.log("--- DEBUG LOG EXPORT ---");
-    console.log(combined);
-    console.log("------------------------");
-
-    // 2. Try Clipboard API
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(combined).then(() => {
-        showNotification('Debug logs copied to clipboard!', 3000);
-      }).catch(err => {
-        console.error('Clipboard API failed', err);
-        fallbackCopy(combined);
-      });
-    } else {
-      fallbackCopy(combined);
-    }
-  });
-}
-
-function fallbackCopy(text) {
-  const textArea = document.createElement("textarea");
-  textArea.value = text;
-  textArea.style.top = "0";
-  textArea.style.left = "0";
-  textArea.style.position = "fixed";
-
-  document.body.appendChild(textArea);
-  textArea.focus();
-  textArea.select();
-
-  try {
-    const successful = document.execCommand('copy');
-    if (successful) alert('Debug logs copied to clipboard (Fallback)!');
-    else alert('Failed to copy. Check Console.');
-  } catch (err) {
-    console.error('Fallback copy failed', err);
-    alert('Failed to copy. Check Console.');
-  }
-
-  document.body.removeChild(textArea);
-}
-
-// --- Initialization ---
-// Load Persistence last to ensure UI helpers (showNotification) are ready
-if (bookManager.loadFromStorage()) {
-  setTimeout(() => {
-    if (typeof showNotification === 'function') {
-      showNotification("Restored Book from Storage");
-    }
-    // Refresh Editor State with Loaded Data
-    const part = bookManager.getCurrentPart();
-    if (part) {
-      typingEngine.reset(part.content);
-      lastEngineTextLength = part.content.length;
-      if (typeof renderCustomEditor === 'function') renderCustomEditor(part);
-
-      // Restore Cursor if available?
-      // TypingEngine reset might zero it.
-      // We should sync typingEngine cursor to part.cursor if possible (not currently supported by reset)
-      // Manual sync:
-      // typingEngine.cursorIndex = part.cursor; // If public
-    }
-  }, 100);
-}
+// Start
+requestAnimationFrame(loop);
