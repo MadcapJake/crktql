@@ -12,18 +12,18 @@ export class HelpManager {
                     <p>yôn Cuktelo is a grid-based writing environment designed for writing Hîsyêô without a keyboard.</p>
                     <p>Use the <strong>Overview Mode</strong> to navigate the infinite grid of 'parts'.</p>
                     <p>Use the <strong>Editor Mode</strong> to write content within a part.</p>
-                    <p>Press <strong>Start</strong> to focus on the gutter menu.</p>
+                    <p>Press <i class="fa-solid fa-square-caret-right icon-grey"></i> <strong>Start</strong> to focus on the gutter menu.</p>
                 `
             },
             {
                 title: "Book Overview",
                 text: `
                     <h3>Moving Around</h3>
-                    <p>Press <strong>Select</strong> to open the Book Overview.</p>
+                    <p>Press <i class="fa-solid fa-square-caret-left icon-grey"></i> <strong>Select</strong> to open the Book Overview.</p>
                     <p>Use the <i class="fa-solid fa-arrows-up-down-left-right icon-purple"></i> to move the cursor one cell at a time.</p>
                     <p>Hold <i class="fa-solid fa-y icon-yellow"></i> + <i class="fa-solid fa-arrows-up-down-left-right icon-purple"></i> to jump to the edge of the visible screen.</p>
                     <p>Press <i class="fa-solid fa-a icon-green"></i> to open a part in Editor Mode.</p>
-                    <p>Press <strong>Select</strong> again to return to the part editor where you were.</p>
+                    <p>Press <i class="fa-solid fa-square-caret-left icon-grey"></i> <strong>Select</strong> again to return to the part editor where you were.</p>
                     
                     <h3>Zooming</h3>
                     <p>Use <strong>LB</strong> to zoom in and see less of the grid.</p>

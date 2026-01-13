@@ -41,7 +41,7 @@ document.querySelector('#app').innerHTML = `
         <div class="modal-content">
             <h2 id="confirm-title">Confirm</h2>
             <p id="confirm-message" style="margin-bottom: 2rem; color: #ccc; text-align: center;">Are you sure?</p>
-            <div class="modal-footer">Press <strong>B</strong> to Confirm, <strong>Start</strong> to Cancel</div>
+            <div class="modal-footer"><i class="fa-solid fa-b icon-red"></i> Confirm&emsp;<i class="fa-solid fa-square-caret-right icon-grey"></i> <strong>Start</strong> to Cancel</div>
         </div>
     </div>
 
