@@ -34,6 +34,8 @@ describe('OverviewMode', () => {
         };
 
         overviewMode = new OverviewMode(mocks);
+        // Seed initial state
+        overviewMode.syncInputState({ buttons: { dpad: {} } });
     });
 
     it('activates and syncs view', () => {

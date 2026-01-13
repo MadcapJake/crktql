@@ -4,9 +4,13 @@ export class Visualizer {
         this.leftJoy = this.container.querySelector('#left-joy');
         this.rightJoy = this.container.querySelector('#right-joy');
 
-        // Create radial segments
-        this.createRadialSegments(this.leftJoy, 'left');
-        this.createRadialSegments(this.rightJoy, 'right');
+        // Cache stick points
+        this.leftStickPoint = this.leftJoy.querySelector('.stick-point');
+        this.rightStickPoint = this.rightJoy.querySelector('.stick-point');
+
+        // Create and Cache segments
+        this.leftSegments = this.createRadialSegments(this.leftJoy, 'left');
+        this.rightSegments = this.createRadialSegments(this.rightJoy, 'right');
     }
 
     createRadialSegments(joyElement, side) {
@@ -17,6 +21,8 @@ export class Visualizer {
         const segmentContainer = document.createElement('div');
         segmentContainer.className = 'segment-container';
 
+        const segments = [];
+
         sectors.forEach((sector, index) => {
             const seg = document.createElement('div');
             seg.className = `segment segment-${index}`;
@@ -24,58 +30,55 @@ export class Visualizer {
 
             const label = document.createElement('span');
             label.className = 'segment-label';
-            seg.appendChild(label);
 
+            // Cache finding the label? Or just the segment?
+            // Storing object { el: seg, label: label, sector: sector } is best.
+            const segmentObj = { el: seg, label: label, sector: sector };
+
+            seg.appendChild(label);
             segmentContainer.appendChild(seg);
+            segments.push(segmentObj);
         });
 
         joyElement.appendChild(segmentContainer);
+        return segments;
     }
 
     update(input, mode, mappings) {
         if (!input) return;
 
-        this.updateJoystick(this.leftJoy, input.sticks.left, mode, mappings, 'left');
-        this.updateJoystick(this.rightJoy, input.sticks.right, mode, mappings, 'right');
+        this.updateJoystick(this.leftStickPoint, this.leftSegments, input.sticks.left, mode, mappings, 'left');
+        this.updateJoystick(this.rightStickPoint, this.rightSegments, input.sticks.right, mode, mappings, 'right');
     }
 
-    updateJoystick(joyElement, stickData, mode, mappings, side) {
+    updateJoystick(stickPoint, segments, stickData, mode, mappings, side) {
         // Move the stick point (visual feedback of physical stick)
-        const stickPoint = joyElement.querySelector('.stick-point');
         const maxDist = 30; // px
         const x = stickData.x * maxDist;
         const y = stickData.y * maxDist;
         stickPoint.style.transform = `translate(${x}px, ${y}px)`;
 
-        // Highlight active sector
-        const segments = joyElement.querySelectorAll('.segment');
-        segments.forEach(seg => {
-            seg.classList.remove('active');
-            const label = seg.querySelector('.segment-label');
-            label.textContent = ''; // Reset
-        });
+        // Update Segments
+        // Un-highlight all
+        for (const seg of segments) {
+            seg.el.classList.remove('active');
+            seg.label.textContent = '';
+        }
 
+        // Highlight active
         if (stickData.active && stickData.sector) {
-            const activeSeg = joyElement.querySelector(`.segment[data-sector="${stickData.sector}"]`);
-            if (activeSeg) activeSeg.classList.add('active');
+            const active = segments.find(s => s.sector === stickData.sector);
+            if (active) active.el.classList.add('active');
         }
 
         // Update Labels based on mapping
-        // mappings structure: { ONSET: { LEFT: {...}, RIGHT: {...} }, ... }
-
         let currentMap = null;
         if (mode === 'ONSET') {
             currentMap = mappings.ONSET[side.toUpperCase()];
         } else if (mode === 'RIME_LEFT') {
-            // Left Trigger Held
-            // Left Joystick = Vowels (A)
-            // Right Joystick = Coda (B)
             if (side === 'left') currentMap = mappings.RIME.VOWELS;
             if (side === 'right') currentMap = mappings.RIME.CODA;
         } else if (mode === 'RIME_RIGHT') {
-            // Right Trigger Held
-            // Right Joystick = Vowels (A)
-            // Left Joystick = Coda (B)
             if (side === 'right') currentMap = mappings.RIME.VOWELS;
             if (side === 'left') currentMap = mappings.RIME.CODA;
         } else if (mode === 'PUNCTUATION') {
@@ -83,13 +86,12 @@ export class Visualizer {
         }
 
         if (currentMap) {
-            segments.forEach(seg => {
-                const sector = seg.dataset.sector;
-                const char = currentMap[sector];
+            for (const seg of segments) {
+                const char = currentMap[seg.sector];
                 if (char) {
-                    seg.querySelector('.segment-label').textContent = char.toUpperCase();
+                    seg.label.textContent = char.toUpperCase();
                 }
-            });
+            }
         }
     }
 }

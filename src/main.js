@@ -210,7 +210,6 @@ const editorMode = new EditorMode({
   gamepadManager,
   renderer: editorRenderer,
   showNotification: (msg) => showNotification(msg),
-  onPaste: () => window.handlePaste && window.handlePaste(), // Stub or ref
   onVisualSelect: (cursor) => {
     visualSelectMode.enter(cursor);
     focusManager.setMode('VISUAL_SELECT');

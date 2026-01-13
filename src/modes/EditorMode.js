@@ -206,10 +206,21 @@ export class EditorMode extends TextEntryMode {
         }
 
         // Navigation
-        if (justPressed('left')) {
-            if (this.isModifierHeld) {
+        const navLeft = justPressed('left');
+        const navRight = justPressed('right');
+        // navUp/Down unused in override currently but good to have if needed, or remove.
+        // Actually I don't use navUp/Down in the override block below.
+
+        // Base Navigation
+        // We pass 'false' for singleLine because EditorMode is multi-line.
+        cursor = this.navigate(dpad, cursor, content, false);
+        handledNav = cursor !== part.cursor;
+
+        if (this.isModifierHeld) {
+            // Override with Word Nav
+            if (navLeft) {
                 // Word Left: Start of words (including current), punct separate
-                let target = cursor;
+                let target = part.cursor; // Use original
                 const getCat = (i) => {
                     if (i < 0) return 'NONE';
                     const c = content[i];
@@ -218,36 +229,20 @@ export class EditorMode extends TextEntryMode {
                     return 'PUNCT';
                 };
 
-                // 1. If at start, done.
                 if (target > 0) {
-                    // Logic:
-                    // Look strictly LEFT of cursor (index - 1).
-                    // If SPACE, skip spaces leftwards.
-                    // Then continue to skip current category.
-
                     let i = target - 1;
-
-                    // Skip trailing spaces if any
                     while (i >= 0 && getCat(i) === 'SPACE') i--;
-
                     if (i >= 0) {
                         const type = getCat(i);
-                        // Consume matching type
                         while (i >= 0 && getCat(i) === type) i--;
                     }
-
                     target = i + 1;
                 }
                 cursor = target;
-            } else {
-                cursor = Math.max(0, cursor - 1);
-            }
-            handledNav = true;
-        }
-        if (justPressed('right')) {
-            if (this.isModifierHeld) {
-                // Word Right: End of words (including current), punct separate
-                let target = cursor;
+                handledNav = true;
+            } else if (navRight) {
+                // Word Right
+                let target = part.cursor; // Use original
                 const len = content.length;
                 const getCat = (i) => {
                     if (i >= len) return 'NONE';
@@ -258,88 +253,22 @@ export class EditorMode extends TextEntryMode {
                 };
 
                 if (target < len) {
-                    // Logic:
-                    // If SPACE, skip spaces rightwards.
-                    // Then consume category.
-
                     let i = target;
-
-                    // Skip spaces if starting on one
                     while (i < len && getCat(i) === 'SPACE') i++;
-
                     if (i < len) {
                         const type = getCat(i);
-                        // Consume matching type
                         while (i < len && getCat(i) === type) i++;
                     }
-
                     target = i;
                 }
                 cursor = target;
-            } else {
-                cursor = Math.min(content.length, cursor + 1);
+                handledNav = true;
             }
-            handledNav = true;
+            // Page Up/Down could go here too if we want overrides
         }
-        if (justPressed('up')) {
-            if (this.isModifierHeld) {
-                // Page Up (Approx 10 lines)
-                let newLinesFound = 0;
-                let target = cursor;
-                while (target > 0 && newLinesFound < 10) {
-                    target--;
-                    if (content[target] === '\n') newLinesFound++;
-                }
-                cursor = target;
-            } else {
-                // Standard Up
-                const lastNewline = content.lastIndexOf('\n', cursor - 1);
-                if (lastNewline !== -1) {
-                    const currentLineStart = content.lastIndexOf('\n', cursor - 1);
-                    const col = cursor - currentLineStart - 1;
 
-                    const prevLineEnd = currentLineStart;
-                    const prevLineStart = content.lastIndexOf('\n', prevLineEnd - 1);
 
-                    const lineLen = prevLineEnd - prevLineStart - 1;
-                    const targetCol = Math.min(col, lineLen);
-                    cursor = (prevLineStart + 1) + targetCol;
-                } else {
-                    cursor = 0; // Top of file
-                }
-            }
-            handledNav = true;
-        }
-        if (justPressed('down')) {
-            if (this.isModifierHeld) {
-                // Page Down
-                let newLinesFound = 0;
-                let target = cursor;
-                while (target < content.length && newLinesFound < 10) {
-                    if (content[target] === '\n') newLinesFound++;
-                    target++;
-                }
-                cursor = target;
-            } else {
-                // Standard Down
-                const nextNewline = content.indexOf('\n', cursor);
-                if (nextNewline !== -1) {
-                    const currentLineStart = content.lastIndexOf('\n', cursor - 1);
-                    const col = cursor - (currentLineStart + 1);
 
-                    const nextLineStart = nextNewline + 1;
-                    const nextLineEnd = content.indexOf('\n', nextLineStart);
-                    const actualEnd = nextLineEnd === -1 ? content.length : nextLineEnd;
-                    const nextLineLen = actualEnd - nextLineStart;
-
-                    const targetCol = Math.min(col, nextLineLen);
-                    cursor = nextLineStart + targetCol;
-                } else {
-                    cursor = content.length;
-                }
-            }
-            handledNav = true;
-        }
 
         // Update persistent cursor
         if (handledNav) {
@@ -596,6 +525,7 @@ export class EditorMode extends TextEntryMode {
             const text = await navigator.clipboard.readText();
             if (!text) return;
 
+            // Re-fetch state after async await to prevent race condition
             const part = this.bookManager.getCurrentPart();
             if (!part) return;
 

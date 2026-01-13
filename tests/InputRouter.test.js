@@ -79,6 +79,12 @@ describe('InputRouter', () => {
         deps.focusManager.mode = 'RENAMING';
         router.route(createInput(), {});
         expect(deps.renamingMode.handleInput).toHaveBeenCalled();
+
+        // New Test: Renaming Delegation explicitly (User Request)
+        deps.focusManager.mode = 'RENAMING';
+        deps.renamingMode.handleInput.mockClear();
+        router.handleRenaming({}, {});
+        expect(deps.renamingMode.handleInput).toHaveBeenCalled();
     });
 
     describe('User Scenario: Basic Gutter Tests', () => {
