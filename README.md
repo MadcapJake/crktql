@@ -5,7 +5,7 @@
 A gamepad-only [Hîsyêô](https://hisyeo.github.io/) text editor designed for efficient, controller-based writing and text manipulation.
 
 ## Overview
-**yôn Cuktelo** reimagines text entry by mapping typing, navigation, and editing commands to a standard gamepad controller. It features a modal interface similar to console text editors but optimized for thumbs, allowing for high-speed input and precise control without a keyboard.
+**yôn Cuktelo** reimagines text entry by mapping typing, navigation, and editing commands to a standard gamepad controller. It features a modal interface similar to console text editors but optimized for thumbs, allowing for (hopefully) high-speed input and precise control without a keyboard.
 
 ## Features
 - **Gamepad Typing**: Chorded syllable entry system.
@@ -39,7 +39,7 @@ A gamepad-only [Hîsyêô](https://hisyeo.github.io/) text editor designed for e
 4. Open `http://localhost:5173` (or the port shown) in your browser.
    *Ensure a gamepad is connected before pressing any buttons to initialize input.*
 
-## Controls (Xbox Layout)
+## Controls
 
 ### General
 - **Modifier (North / Y)**: Hold to access secondary layers
