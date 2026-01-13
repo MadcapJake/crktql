@@ -15,7 +15,7 @@ A gamepad-only [Hîsyêô](https://hisyeo.github.io/) text editor designed for e
   - **Visual Select**: Precise text selection and manipulation.
   - **Gutter**: Bottom bar for file management and settings.
 - **Persistence**: Auto-saves content and settings to LocalStorage.
-- **Undo/Redo**: Robust history system.
+- **Undo/Redo**: Robust history system saved to SessionStorage.
 - **Citations**: Atomic citation tags `{{cite:x,y}}` with navigation support.
 
 ## Installation
