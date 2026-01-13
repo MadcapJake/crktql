@@ -219,49 +219,10 @@ export class EditorMode extends TextEntryMode {
         if (this.isModifierHeld) {
             // Override with Word Nav
             if (navLeft) {
-                // Word Left: Start of words (including current), punct separate
-                let target = part.cursor; // Use original
-                const getCat = (i) => {
-                    if (i < 0) return 'NONE';
-                    const c = content[i];
-                    if (/\s/.test(c)) return 'SPACE';
-                    if (/\w/.test(c)) return 'WORD';
-                    return 'PUNCT';
-                };
-
-                if (target > 0) {
-                    let i = target - 1;
-                    while (i >= 0 && getCat(i) === 'SPACE') i--;
-                    if (i >= 0) {
-                        const type = getCat(i);
-                        while (i >= 0 && getCat(i) === type) i--;
-                    }
-                    target = i + 1;
-                }
-                cursor = target;
+                cursor = this.navigateWordLeft(part.cursor, content);
                 handledNav = true;
             } else if (navRight) {
-                // Word Right
-                let target = part.cursor; // Use original
-                const len = content.length;
-                const getCat = (i) => {
-                    if (i >= len) return 'NONE';
-                    const c = content[i];
-                    if (/\s/.test(c)) return 'SPACE';
-                    if (/\w/.test(c)) return 'WORD';
-                    return 'PUNCT';
-                };
-
-                if (target < len) {
-                    let i = target;
-                    while (i < len && getCat(i) === 'SPACE') i++;
-                    if (i < len) {
-                        const type = getCat(i);
-                        while (i < len && getCat(i) === type) i++;
-                    }
-                    target = i;
-                }
-                cursor = target;
+                cursor = this.navigateWordRight(part.cursor, content);
                 handledNav = true;
             }
             // Page Up/Down could go here too if we want overrides
@@ -473,6 +434,9 @@ export class EditorMode extends TextEntryMode {
                 // break equivalent (return from fn)
                 return;
             }
+
+
+            // Navigation (lines 208-...)
 
             // 2. Delta Text
             const result = this.processTextChange(

@@ -106,4 +106,55 @@ describe('TextEntryMode', () => {
             expect(mocks.renderer.render).toHaveBeenCalledWith({ content: "B", cursor: 1 });
         });
     });
+    describe('Word Navigation', () => {
+        it('navigateWordLeft: Jumps to start of word', () => {
+            // "Hello World"
+            //        ^ (7) 'W'
+            const content = "Hello World";
+            const result = mode.navigateWordLeft(7, content);
+            expect(result).toBe(6); // Start of 'World'
+        });
+
+        it('navigateWordLeft: Jumps over spaces and previous word', () => {
+            // "Hello World"
+            //       ^ (6) 'W'
+            const content = "Hello World";
+            const result = mode.navigateWordLeft(6, content);
+            expect(result).toBe(0); // Start of 'Hello'
+        });
+
+        it('navigateWordRight: Jumps to end of word', () => {
+            // "Hello World"
+            //  ^ (1) 'e'
+            const content = "Hello World";
+            const result = mode.navigateWordRight(1, content);
+            expect(result).toBe(5); // End of 'Hello' (index 5 is space)
+        });
+
+        it('navigateWordRight: Jumps over spaces to next word end', () => {
+            // "Hello World"
+            //       ^ (5) ' '
+            const content = "Hello World";
+            const result = mode.navigateWordRight(5, content);
+            expect(result).toBe(11); // End of 'World'
+        });
+
+        it('handles Ghost Boundary Regression (concatenation)', () => {
+            // Scenario: "fodomodo tolobowo" -> delete space -> "fodomodotolobowo"
+            // User reported stopping at old space index (8).
+
+            const content = "fodomodotolobowo"; // 16 chars
+            let cursor = 0;
+
+            // Move Right
+            cursor = mode.navigateWordRight(cursor, content);
+
+            // "fodomodotolobowo" is ONE word.
+            // Should jump to end (16).
+            // Logic: Scan for SPACE? No space.
+            // Scan for WORD type. 'f' is word. Iterate until non-word or end.
+            // Should reach 16.
+            expect(cursor).toBe(16);
+        });
+    });
 });

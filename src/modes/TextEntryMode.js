@@ -57,7 +57,54 @@ export class TextEntryMode {
         }
 
         this.lastDpad = { ...dpad };
+        this.lastDpad = { ...dpad };
         return cursor;
+    }
+
+    // Word Navigation Helpers
+    navigateWordLeft(cursor, content) {
+        let target = cursor;
+        const getCat = (i) => {
+            if (i < 0) return 'NONE';
+            const c = content[i];
+            if (/\s/.test(c)) return 'SPACE';
+            if (/\w/.test(c)) return 'WORD';
+            return 'PUNCT';
+        };
+
+        if (target > 0) {
+            let i = target - 1;
+            while (i >= 0 && getCat(i) === 'SPACE') i--;
+            if (i >= 0) {
+                const type = getCat(i);
+                while (i >= 0 && getCat(i) === type) i--;
+            }
+            target = i + 1;
+        }
+        return target;
+    }
+
+    navigateWordRight(cursor, content) {
+        let target = cursor;
+        const len = content.length;
+        const getCat = (i) => {
+            if (i >= len) return 'NONE';
+            const c = content[i];
+            if (/\s/.test(c)) return 'SPACE';
+            if (/\w/.test(c)) return 'WORD';
+            return 'PUNCT';
+        };
+
+        if (target < len) {
+            let i = target;
+            while (i < len && getCat(i) === 'SPACE') i++;
+            if (i < len) {
+                const type = getCat(i);
+                while (i < len && getCat(i) === type) i++;
+            }
+            target = i;
+        }
+        return target;
     }
 
     // Shared Optimized Render
