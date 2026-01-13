@@ -432,7 +432,16 @@ bookMenu.onAction = (action) => {
   if (action === 'new') {
     inputRouter.requestConfirm('Create new book? Unsaved changes will be lost.', () => {
       bookManager.loadBook({}, "untitled.htz");
-      bookManager.createPart(0, 0);
+      bookManager.createPart(0, 0); // This sets current part to 0,0
+
+      // Update Editor State
+      const part = bookManager.getCurrentPart();
+      if (part) {
+        typingEngine.reset(part.content);
+        if (typeof lastEngineTextLength !== 'undefined') lastEngineTextLength = part.content.length;
+        editorRenderer.render(part);
+      }
+
       focusManager.setMode('EDITOR');
       gridOverview.render();
       showNotification('New Book Created');
@@ -464,6 +473,15 @@ bookMenu.onAction = (action) => {
         try {
           const data = JSON.parse(e.target.result);
           bookManager.loadBook(data, file.name || "imported.htz");
+
+          // Update Editor State
+          const part = bookManager.getCurrentPart();
+          if (part) {
+            typingEngine.reset(part.content);
+            if (typeof lastEngineTextLength !== 'undefined') lastEngineTextLength = part.content.length;
+            editorRenderer.render(part);
+          }
+
           focusManager.setMode('EDITOR');
           gridOverview.render();
           showNotification(`Loaded ${file.name}`);
