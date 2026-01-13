@@ -42,34 +42,35 @@ A gamepad-only [Hîsyêô](https://hisyeo.github.io/) text editor designed for e
 ## Controls (Xbox Layout)
 
 ### General
-- **Modifier (North / Y)**: Hold to access secondary layers.
+- **Modifier (North / Y)**: Hold to access secondary layers
 
 ### Editor Mode
-- **Left Stick**: Cursor Movement (Standard).
-- **Modifier + Left/Right**: Word Navigation.
-- **South (A)**: Enter / Confirm.
-- **West (X)**: Delete Backwards.
-- **Modifier + West (X)**: Delete Word Backwards.
-- **Modifier + L3/R3**: Paste from Clipboard.
-- **Modifier + RB**: Enter Visual Select Mode.
-- **Modifier + LT**: Undo.
-- **Modifier + RT**: Redo.
+- **Left Stick / Right Stick**: Syllable Entry
+- **D-Pad**: Cursor Movement (Standard)
+- **Modifier + D-Pad**: Word Navigation
+- **South (A)**: Enter / Confirm
+- **West (X)**: Delete Backwards
+- **Modifier + West (X)**: Delete Word Backwards
+- **Modifier + L3/R3**: Paste from Clipboard
+- **Modifier + RB**: Enter Visual Select Mode
+- **Modifier + LT**: Undo
+- **Modifier + RT**: Redo
 
 ### Overview Mode
-- **D-Pad**: Grid Navigation.
-- **South (A)**: Enter Selected Part.
-- **Modifier + B**: Follow Link (if valid).
+- **D-Pad**: Grid Navigation
+- **South (A)**: Enter Selected Part
+- **Modifier + B**: Follow Link (if valid)
 
 ### Visual Select Mode
-- **D-Pad**: Expand/Shrink Selection.
-- **West (X)**: Cut.
-- **South (A)**: Copy.
+- **D-Pad**: Expand/Shrink Selection
+- **West (X)**: Cut
+- **South (A)**: Copy
 
 ## Project Structure
-- `src/main.js`: Application entry point and main loop.
-- `src/modes/`: Mode logic (Editor, Overview, etc.).
-- `src/ui/`: UI Renderers.
-- `src/input/`: Input routing and mapping.
+- `src/main.js`: Application entry point and main loop
+- `src/modes/`: Mode logic (Editor, Overview, etc.)
+- `src/ui/`: UI Renderers
+- `src/input/`: Input routing and mapping
 
 ## License
 [MIT](LICENSE)
