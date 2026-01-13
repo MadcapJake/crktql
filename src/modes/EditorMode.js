@@ -124,7 +124,9 @@ export class EditorMode extends TextEntryMode {
             if (part) this.renderIfChanged(this.renderer, part.content, part.cursor, part, this.selectionAnchor, this.isModifierHeld, this.typingEngine.getFormattedSyllable());
 
             // Toggle Status Icon
-            this.focusManager.setModifierState(this.isModifierHeld);
+            // Update Status Icon
+            const isJoystickActive = frameInput.sticks?.left?.active || false;
+            this.focusManager.updateModeIcon(this.typingEngine.state.mode, this.isModifierHeld, isJoystickActive);
         }
 
         // Undo: Y (North) + Left Trigger
@@ -469,7 +471,9 @@ export class EditorMode extends TextEntryMode {
             // visualizer update follows.
 
 
-            this.visualizer.update(frameInput, state.mode, this.typingEngine.mappings, this.typingEngine.state.syllable);
+            // Sync Icon
+            const isJoystickActive = frameInput.sticks?.left?.active || false;
+            this.focusManager.updateModeIcon(state.mode, this.isModifierHeld, isJoystickActive);
         }
         this.gamepadManager.lastButtons = { ...frameInput.buttons };
     }

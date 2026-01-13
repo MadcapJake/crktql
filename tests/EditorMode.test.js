@@ -32,12 +32,12 @@ describe('EditorMode', () => {
             },
             focusManager: {
                 setMode: vi.fn(),
-                setModifierState: vi.fn()
+                setModifierState: vi.fn(),
+                updateModeIcon: vi.fn()
             },
             gridOverview: {
                 setCursor: vi.fn(),
                 syncInputState: vi.fn(),
-                updateView: vi.fn(),
                 setLinkTarget: vi.fn()
             },
             visualizer: {

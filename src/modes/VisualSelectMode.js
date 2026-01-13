@@ -23,6 +23,10 @@ export class VisualSelectMode {
         if (part) {
             this.renderer.render(part, this.anchor);
         }
+
+        // Update Focus and Icon
+        this.focusManager.setMode('VISUAL_SELECT');
+        this.focusManager.updateModeIcon();
     }
 
     handleInput(frameInput) {

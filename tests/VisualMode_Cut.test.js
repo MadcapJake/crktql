@@ -22,7 +22,11 @@ class MockDeps {
             lastButtons: {},
             getActiveGamepad: vi.fn().mockReturnValue(null) // Added for _exit safety
         };
-        this.focusManager = { setMode: vi.fn() };
+        this.focusManager = {
+            setMode: vi.fn(),
+            setModifierState: vi.fn(),
+            updateModeIcon: vi.fn()
+        };
         this.typingEngine = {
             reset: vi.fn(),
             resetInputState: vi.fn()

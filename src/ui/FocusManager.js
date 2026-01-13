@@ -43,14 +43,50 @@ export class FocusManager {
         }
     }
 
-    setModifierState(isHeld) {
+    updateModeIcon(typingMode, isModifierHeld, onsetSelectionInProgress = false) {
         const modeIcon = document.getElementById('mode-indicator');
-        if (modeIcon) {
-            if (isHeld) {
-                modeIcon.innerHTML = '<i class="fa-solid fa-pause"></i>';
-            } else {
-                modeIcon.innerHTML = '<i class="fa-solid fa-border-none"></i>';
-            }
+        if (!modeIcon) return;
+
+        // If in Visual Select Mode, use specific icon
+        if (this.mode === 'VISUAL_SELECT') {
+            modeIcon.innerHTML = '<i class="fa-solid fa-eye"></i>';
+            return;
         }
+
+        if (this.mode !== 'EDITOR') {
+            // Default for other modes
+            modeIcon.innerHTML = '<i class="fa-solid fa-border-none"></i>';
+            return;
+        }
+
+        // Editor Mode Dynamic Icons
+        let iconHtml = '<i class="fa-solid fa-border-none"></i>';
+
+        switch (typingMode) {
+            case 'ONSET':
+                if (onsetSelectionInProgress) {
+                    iconHtml = '<i class="fa-regular fa-square"></i>';
+                } else {
+                    iconHtml = isModifierHeld
+                        ? '<i class="fa-solid fa-pause"></i>'
+                        : '<i class="fa-solid fa-border-none"></i>';
+                }
+                break;
+            case 'RIME_LEFT':
+                iconHtml = '<i class="fa-solid fa-square-caret-left"></i>';
+                break;
+            case 'RIME_RIGHT':
+                iconHtml = '<i class="fa-solid fa-square-caret-right"></i>';
+                break;
+            case 'PUNCTUATION':
+                iconHtml = '<i class="fa-solid fa-square-minus"></i>';
+                break;
+        }
+        modeIcon.innerHTML = iconHtml;
+    }
+
+    // Deprecated alias for compatibility during refactor, though we should update callers.
+    setModifierState(isHeld) {
+        this.updateModeIcon('ONSET', isHeld);
     }
 }
