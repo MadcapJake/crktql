@@ -37,6 +37,7 @@ describe('Clipboard Integration', () => {
             processFrame: vi.fn(),
             resetInputState: vi.fn(),
             state: { mode: 'ONSET' },
+            getFormattedSyllable: vi.fn().mockReturnValue(''),
             mappings: {}
         };
         const focusManager = { setMode: vi.fn() };

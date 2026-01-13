@@ -120,7 +120,7 @@ export class EditorMode extends TextEntryMode {
         // We should force render if modifier state changes.
         if (this.gamepadManager.lastButtons?.north !== frameInput.buttons.north) {
             const part = this.bookManager.getCurrentPart();
-            if (part) this.renderIfChanged(this.renderer, part.content, part.cursor, part, this.selectionAnchor, this.isModifierHeld);
+            if (part) this.renderIfChanged(this.renderer, part.content, part.cursor, part, this.selectionAnchor, this.isModifierHeld, this.typingEngine.getFormattedSyllable());
 
             // Toggle Status Icon
             const modeIcon = document.getElementById('mode-indicator');
@@ -505,7 +505,7 @@ export class EditorMode extends TextEntryMode {
                 this.lastEngineTextLength = result.newLength;
             }
 
-            this.renderIfChanged(this.renderer, part.content, part.cursor, part, this.selectionAnchor);
+            this.renderIfChanged(this.renderer, part.content, part.cursor, part, this.selectionAnchor, this.isModifierHeld, this.typingEngine.getFormattedSyllable());
 
             // "handledAtomic" check in original was just to avoid overwriting lastLength, but we handled that.
             // visualizer update follows.
@@ -547,7 +547,7 @@ export class EditorMode extends TextEntryMode {
             part.content = newContent;
             part.cursor = cursor + text.length;
 
-            this.renderIfChanged(this.renderer, part.content, part.cursor, part, this.selectionAnchor);
+            this.renderIfChanged(this.renderer, part.content, part.cursor, part, this.selectionAnchor, this.isModifierHeld, this.typingEngine.getFormattedSyllable());
             this.typingEngine.reset(newContent);
             this.lastEngineTextLength = newContent.length;
 

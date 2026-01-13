@@ -64,15 +64,40 @@ export class TextEntryMode {
     renderIfChanged(renderer, content, cursor, ...renderArgs) {
         if (!renderer) return;
 
+        let changed = false;
+
+        // Check primary state
         if (this.lastRenderedState?.text !== content ||
             this.lastRenderedState?.cursor !== cursor) {
+            changed = true;
+        }
 
+        // Check auxiliary args (shallow comparison)
+        if (!changed) {
+            const lastArgs = this.lastRenderedState?.args;
+            if (!lastArgs && renderArgs.length > 0) {
+                changed = true;
+            } else if (lastArgs) {
+                if (lastArgs.length !== renderArgs.length) {
+                    changed = true;
+                } else {
+                    for (let i = 0; i < renderArgs.length; i++) {
+                        if (renderArgs[i] !== lastArgs[i]) {
+                            changed = true;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (changed) {
             if (renderArgs.length > 0) {
                 renderer.render(...renderArgs);
             } else {
                 renderer.render({ content, cursor });
             }
-            this.lastRenderedState = { text: content, cursor };
+            this.lastRenderedState = { text: content, cursor, args: renderArgs };
         }
     }
 

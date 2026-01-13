@@ -15,6 +15,7 @@ describe('EditorMode', () => {
                 reset: vi.fn(),
                 processFrame: vi.fn().mockReturnValue(null),
                 state: { mode: 'INITIAL', syllable: '' },
+                getFormattedSyllable: vi.fn().mockReturnValue(''),
                 mappings: {}
             },
             bookManager: {
