@@ -208,10 +208,36 @@ export class EditorMode extends TextEntryMode {
         // Navigation
         if (justPressed('left')) {
             if (this.isModifierHeld) {
-                // Ctrl+Left (Word Left)
-                let target = cursor - 1;
-                while (target > 0 && /\s/.test(content[target - 1])) target--; // Skip trailing spaces
-                while (target > 0 && !/\s/.test(content[target - 1])) target--; // Skip word
+                // Word Left: Start of words (including current), punct separate
+                let target = cursor;
+                const getCat = (i) => {
+                    if (i < 0) return 'NONE';
+                    const c = content[i];
+                    if (/\s/.test(c)) return 'SPACE';
+                    if (/\w/.test(c)) return 'WORD';
+                    return 'PUNCT';
+                };
+
+                // 1. If at start, done.
+                if (target > 0) {
+                    // Logic:
+                    // Look strictly LEFT of cursor (index - 1).
+                    // If SPACE, skip spaces leftwards.
+                    // Then continue to skip current category.
+
+                    let i = target - 1;
+
+                    // Skip trailing spaces if any
+                    while (i >= 0 && getCat(i) === 'SPACE') i--;
+
+                    if (i >= 0) {
+                        const type = getCat(i);
+                        // Consume matching type
+                        while (i >= 0 && getCat(i) === type) i--;
+                    }
+
+                    target = i + 1;
+                }
                 cursor = target;
             } else {
                 cursor = Math.max(0, cursor - 1);
@@ -220,10 +246,35 @@ export class EditorMode extends TextEntryMode {
         }
         if (justPressed('right')) {
             if (this.isModifierHeld) {
-                // Ctrl+Right (Word Right)
+                // Word Right: End of words (including current), punct separate
                 let target = cursor;
-                while (target < content.length && !/\s/.test(content[target])) target++; // Skip Word
-                while (target < content.length && /\s/.test(content[target])) target++; // Skip Spaces
+                const len = content.length;
+                const getCat = (i) => {
+                    if (i >= len) return 'NONE';
+                    const c = content[i];
+                    if (/\s/.test(c)) return 'SPACE';
+                    if (/\w/.test(c)) return 'WORD';
+                    return 'PUNCT';
+                };
+
+                if (target < len) {
+                    // Logic:
+                    // If SPACE, skip spaces rightwards.
+                    // Then consume category.
+
+                    let i = target;
+
+                    // Skip spaces if starting on one
+                    while (i < len && getCat(i) === 'SPACE') i++;
+
+                    if (i < len) {
+                        const type = getCat(i);
+                        // Consume matching type
+                        while (i < len && getCat(i) === type) i++;
+                    }
+
+                    target = i;
+                }
                 cursor = target;
             } else {
                 cursor = Math.min(content.length, cursor + 1);

@@ -62,29 +62,61 @@ describe('EditorMode', () => {
     });
 
     describe('Navigation (Editor Specific overrides)', () => {
-        it('handles Word Left (Modifier + Left)', () => {
-            const frameInput = {
-                buttons: { dpad: { left: true }, north: true } // North = Modifier
-            };
+        // "Hello World"
+        // 01234567890
+        // Hello World
 
-            // "Hello World", Cursor 5 (between 'o' and ' ')
-            // Ctrl+Left should go to start of "Hello" -> 0
-
+        it('handles Word Left: Jumps to start of word', () => {
+            const frameInput = { buttons: { dpad: { left: true }, north: true } };
+            // "Hello| World" (5) -> "|Hello World" (0)
+            mocks.bookManager.getCurrentPart.mockReturnValue({ content: "Hello World", cursor: 5 });
             editorMode.handleInput(frameInput, {});
-
             expect(mocks.bookManager.setPartCursor).toHaveBeenCalledWith(0);
         });
 
-        it('handles standard Left navigation', () => {
-            const frameInput = {
-                buttons: { dpad: { left: true }, north: false }
-            };
-            // Cursor 5 -> 4
-            mocks.bookManager.getCurrentPart.mockReturnValue({ content: "Hello World", cursor: 5 });
-
+        it('handles Word Left: Jumps over spaces and previous word', () => {
+            const frameInput = { buttons: { dpad: { left: true }, north: true } };
+            // "Hello World|" (11) -> "Hello |World" (6)
+            mocks.bookManager.getCurrentPart.mockReturnValue({ content: "Hello World", cursor: 11 });
             editorMode.handleInput(frameInput, {});
+            expect(mocks.bookManager.setPartCursor).toHaveBeenCalledWith(6);
+        });
 
-            expect(mocks.bookManager.setPartCursor).toHaveBeenCalledWith(4);
+        it('handles Word Left: Punctuation is separate', () => {
+            const frameInput = { buttons: { dpad: { left: true }, north: true } };
+            // "Hello.World" (11) . at 5.
+            // "Hello.W|orld" (7) -> "Hello.|World" (6)
+            mocks.bookManager.getCurrentPart.mockReturnValue({ content: "Hello.World", cursor: 7 });
+            editorMode.handleInput(frameInput, {});
+            expect(mocks.bookManager.setPartCursor).toHaveBeenCalledWith(6);
+
+            // Simulate release to reset 'justPressed' logic
+            editorMode.handleInput({ buttons: { dpad: { left: false }, north: true } }, {});
+
+            // "Hello.|World" (6) -> "Hello|.World" (5) (Dots are punct)
+            // Wait, "Hello|.World". Left from 6 (.) -> 5?
+            // "Start of current word". Current word is ".". Start is 5.
+            // So 6 -> 5.
+            mocks.bookManager.setPartCursor.mockClear();
+            mocks.bookManager.getCurrentPart.mockReturnValue({ content: "Hello.World", cursor: 6 });
+            editorMode.handleInput(frameInput, {});
+            expect(mocks.bookManager.setPartCursor).toHaveBeenCalledWith(5);
+        });
+
+        it('handles Word Right: Jumps to end of word', () => {
+            const frameInput = { buttons: { dpad: { right: true }, north: true } };
+            // "H|ello World" (1) -> "Hello| World" (5)
+            mocks.bookManager.getCurrentPart.mockReturnValue({ content: "Hello World", cursor: 1 });
+            editorMode.handleInput(frameInput, {});
+            expect(mocks.bookManager.setPartCursor).toHaveBeenCalledWith(5);
+        });
+
+        it('handles Word Right: Jumps over spaces to next word end', () => {
+            const frameInput = { buttons: { dpad: { right: true }, north: true } };
+            // "Hello| World" (5) -> "Hello World|" (11)
+            mocks.bookManager.getCurrentPart.mockReturnValue({ content: "Hello World", cursor: 5 });
+            editorMode.handleInput(frameInput, {});
+            expect(mocks.bookManager.setPartCursor).toHaveBeenCalledWith(11);
         });
     });
 
