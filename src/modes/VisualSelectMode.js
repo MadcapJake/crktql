@@ -16,6 +16,7 @@ export class VisualSelectMode {
     enter(cursor) {
         this.anchor = cursor;
         this.lastDpad = { up: false, down: false, left: false, right: false };
+        this.ignoreMod = true; // Always ignore modifier on first frame/until release
 
         // Immediate render to show initial state
         const part = this.bookManager.getCurrentPart();
@@ -36,25 +37,52 @@ export class VisualSelectMode {
         const isMod = frameInput.buttons.north;
         const jp = (btn) => dpad[btn] && !this.lastDpad[btn];
 
+        // Guard: Ignore modifier if held from entry
+        if (this.ignoreMod) {
+            if (!isMod) this.ignoreMod = false; // Released, now valid
+        }
+        const effectiveMod = isMod && !this.ignoreMod;
+
         if (jp('left')) {
-            if (isMod) {
+            if (effectiveMod) {
                 let target = cursor - 1;
-                while (target > 0 && /\s/.test(content[target - 1])) target--;
-                while (target > 0 && !/\s/.test(content[target - 1])) target--;
+                while (target > 0 && /\s/.test(content[target - 1])) target--; // Skip trailing spaces
+                while (target > 0 && !/\s/.test(content[target - 1])) target--; // Skip word
                 cursor = target;
             } else {
-                cursor = Math.max(0, cursor - 1);
+                // Atomic Left
+                const charBefore = content[cursor - 1];
+                if (charBefore === '}') {
+                    const openBrace = content.lastIndexOf('{{', cursor);
+                    if (openBrace !== -1) {
+                        cursor = openBrace;
+                    } else {
+                        cursor = Math.max(0, cursor - 1);
+                    }
+                } else {
+                    cursor = Math.max(0, cursor - 1);
+                }
             }
             navigated = true;
         }
         if (jp('right')) {
-            if (isMod) {
+            if (effectiveMod) {
                 let target = cursor;
-                while (target < content.length && !/\s/.test(content[target])) target++;
-                while (target < content.length && /\s/.test(content[target])) target++;
+                while (target < content.length && !/\s/.test(content[target])) target++; // Skip Word
+                while (target < content.length && /\s/.test(content[target])) target++; // Skip Spaces
                 cursor = target;
             } else {
-                cursor = Math.min(content.length, cursor + 1);
+                // Atomic Right
+                if (content.substring(cursor, cursor + 2) === '{{') {
+                    const closeBrace = content.indexOf('}}', cursor);
+                    if (closeBrace !== -1) {
+                        cursor = closeBrace + 2;
+                    } else {
+                        cursor = Math.min(content.length, cursor + 1);
+                    }
+                } else {
+                    cursor = Math.min(content.length, cursor + 1);
+                }
             }
             navigated = true;
         }
@@ -116,33 +144,31 @@ export class VisualSelectMode {
                 const sEnd = Math.max(this.anchor, cursor);
                 const originalContent = part.content;
 
-                navigator.clipboard.writeText(rangeText).then(() => {
-                    const newContent = originalContent.slice(0, sStart) + originalContent.slice(sEnd);
-                    const removedText = originalContent.slice(sStart, sEnd);
+                // Sync Cut: Delete immediately
+                const newContent = originalContent.slice(0, sStart) + originalContent.slice(sEnd);
+                const removedText = originalContent.slice(sStart, sEnd);
 
-                    this.historyManager.push({
-                        type: 'REMOVE_TEXT',
-                        partKey: this.bookManager.currentPartKey,
-                        data: {
-                            text: removedText,
-                            index: sStart
-                        }
-                    });
+                this.historyManager.push({
+                    type: 'REMOVE_TEXT',
+                    partKey: this.bookManager.currentPartKey,
+                    data: {
+                        text: removedText,
+                        index: sStart
+                    }
+                });
 
-                    this.bookManager.setCurrentPartContent(newContent);
-                    this.bookManager.setPartCursor(sStart);
+                this.bookManager.setCurrentPartContent(newContent);
+                this.bookManager.setPartCursor(sStart);
+                this.typingEngine.reset(newContent);
 
-                    // Sync Engine
-                    this.typingEngine.reset(newContent);
-
-                    this.showNotification("Cut to Clipboard");
-
-                    // Force re-render to show deletion (Exit will handle final render, but this ensures update)
-                    // Actually _exit calls setMode('EDITOR') which triggers change handler which resets EditorMode.
-                    // So we are safe.
-                }).catch(e => console.error("Cut failed", e));
+                navigator.clipboard.writeText(rangeText)
+                    .then(() => this.showNotification("Cut to Clipboard"))
+                    .catch(e => {
+                        console.error("Clipboard Error", e);
+                        this.showNotification("Cut locally (Clipboard failed)");
+                    })
+                    .finally(() => this._exit());
             }
-            this._exit();
         }
 
         // B (East) -> Cancel

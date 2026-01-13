@@ -21,6 +21,7 @@ export class EditorMode {
 
     resetState() {
         const part = this.bookManager.getCurrentPart();
+        console.log('[EditorMode] Resetting State. Part:', part ? `ID:${part.x},${part.y} Len:${part.content.length}` : 'null');
         if (part) {
             this.typingEngine.reset(part.content);
             this.lastEngineTextLength = part.content.length;
@@ -39,6 +40,14 @@ export class EditorMode {
 
         let cursor = part.cursor || 0;
         const content = part.content || "";
+
+        // Initialize lastButtons if not present (First frame or Connect)
+        if (!this.gamepadManager.lastButtons) {
+            this.gamepadManager.lastButtons = { ...frameInput.buttons };
+            // Do not process actions on the very first frame to prevent "Press on Connect" issues
+            this.lastDpad = { ...frameInput.buttons.dpad }; // Also sync local dpad
+            return;
+        }
 
         // TAB: RB (Right Shoulder) - Only if NOT holding Modifier
         if (frameInput.buttons.rb && !this.gamepadManager.lastButtons?.rb && !frameInput.buttons.north) {
@@ -99,10 +108,28 @@ export class EditorMode {
         const justPressed = (btn) => dpad[btn] && !this.lastDpad[btn];
 
         // Modifier State (Y / North)
-        const isModifierHeld = frameInput.buttons.north;
+        this.isModifierHeld = frameInput.buttons.north;
+
+        // Sync Render Loop (if needed for continuous UI feedback)
+        // We usually only render on change, but modifier might change without content change.
+        // We should force render if modifier state changes.
+        if (this.gamepadManager.lastButtons?.north !== frameInput.buttons.north) {
+            const part = this.bookManager.getCurrentPart();
+            if (part) this.renderer.render(part, this.selectionAnchor, this.isModifierHeld);
+
+            // Toggle Status Icon
+            const modeIcon = document.getElementById('mode-indicator');
+            if (modeIcon) {
+                if (this.isModifierHeld) {
+                    modeIcon.innerHTML = '<i class="fa-solid fa-pause"></i>';
+                } else {
+                    modeIcon.innerHTML = '<i class="fa-solid fa-border-none"></i>';
+                }
+            }
+        }
 
         // Undo: Y (North) + Left Trigger
-        if (isModifierHeld && frameInput.buttons.lt && !this.gamepadManager.lastButtons?.lt) {
+        if (this.isModifierHeld && frameInput.buttons.lt && !this.gamepadManager.lastButtons?.lt) {
             this.historyManager.undo().then(op => {
                 if (op) {
                     this.showNotification(`Undo: ${op.type} (To: ${op.navigateTo?.mode || 'EDITOR'})`);
@@ -139,7 +166,7 @@ export class EditorMode {
         }
 
         // Redo: Y (North) + Right Trigger
-        if (isModifierHeld && frameInput.buttons.rt && !this.gamepadManager.lastButtons.rt) {
+        if (this.isModifierHeld && frameInput.buttons.rt && !this.gamepadManager.lastButtons.rt) {
             this.historyManager.redo().then(op => {
                 if (op) {
                     this.showNotification(`Redo: ${op.type}`);
@@ -175,7 +202,7 @@ export class EditorMode {
 
         // Navigation
         if (justPressed('left')) {
-            if (isModifierHeld) {
+            if (this.isModifierHeld) {
                 // Ctrl+Left (Word Left)
                 let target = cursor - 1;
                 while (target > 0 && /\s/.test(content[target - 1])) target--; // Skip trailing spaces
@@ -187,7 +214,7 @@ export class EditorMode {
             handledNav = true;
         }
         if (justPressed('right')) {
-            if (isModifierHeld) {
+            if (this.isModifierHeld) {
                 // Ctrl+Right (Word Right)
                 let target = cursor;
                 while (target < content.length && !/\s/.test(content[target])) target++; // Skip Word
@@ -199,7 +226,7 @@ export class EditorMode {
             handledNav = true;
         }
         if (justPressed('up')) {
-            if (isModifierHeld) {
+            if (this.isModifierHeld) {
                 // Page Up (Approx 10 lines)
                 let newLinesFound = 0;
                 let target = cursor;
@@ -228,7 +255,7 @@ export class EditorMode {
             handledNav = true;
         }
         if (justPressed('down')) {
-            if (isModifierHeld) {
+            if (this.isModifierHeld) {
                 // Page Down
                 let newLinesFound = 0;
                 let target = cursor;
@@ -291,7 +318,7 @@ export class EditorMode {
         this.lastDpad = { ...dpad };
 
         // VISUAL SELECT TRIGGER: Hold Y + Press RB
-        if (isModifierHeld && frameInput.buttons.rb && !this.gamepadManager.lastButtons?.rb) {
+        if (this.isModifierHeld && frameInput.buttons.rb && !this.gamepadManager.lastButtons?.rb) {
             this.showNotification("Visual Select Mode Entered");
 
             // We need to initialize the mode. 
@@ -314,7 +341,7 @@ export class EditorMode {
         }
 
         // CITATION FOLLOW: Hold Y + Press B
-        if (isModifierHeld && frameInput.buttons.east && !this.gamepadManager.lastButtons.east) {
+        if (this.isModifierHeld && frameInput.buttons.east && !this.gamepadManager.lastButtons.east) {
             const re = /\{\{cite:(-?\d+),(-?\d+)\}\}/g;
             let match;
             let found = null;
@@ -361,7 +388,7 @@ export class EditorMode {
         }
 
         // PASTE TRIGGER: Hold Y + L3/R3 Click
-        if (isModifierHeld && (frameInput.buttons.l3 || frameInput.buttons.r3)) {
+        if (this.isModifierHeld && (frameInput.buttons.l3 || frameInput.buttons.r3)) {
             const lastBtns = this.gamepadManager.lastButtons || {};
             if ((frameInput.buttons.l3 && !lastBtns.l3) ||
                 (frameInput.buttons.r3 && !lastBtns.r3)) {
@@ -385,7 +412,7 @@ export class EditorMode {
         }
 
         // 3. Command Layer Guard
-        if (isModifierHeld) {
+        if (this.isModifierHeld) {
             this.gamepadManager.lastButtons = { ...frameInput.buttons };
             return;
         }

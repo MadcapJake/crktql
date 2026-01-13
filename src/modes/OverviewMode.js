@@ -51,6 +51,17 @@ export class OverviewMode {
         const now = Date.now();
         const buttons = input.buttons;
 
+        // Initialize lastButtons if not present (First frame)
+        if (!this.lastButtons.dpad) {
+            this.lastButtons = { ...buttons, dpad: { ...dpad } };
+
+            // If North is held on entry (e.g. from Citation Follow), ignore its release
+            if (buttons.north) {
+                this.ignoreNextRename = true;
+            }
+            return;
+        }
+
         // 1. Zoom Controls (LB/RB)
         if (buttons.lb && !this.lastButtons.lb) this.adjustZoom(0.2);
         if (buttons.rb && !this.lastButtons.rb) this.adjustZoom(-0.2);

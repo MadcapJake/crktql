@@ -6,7 +6,7 @@ export class EditorRenderer {
         this.settingsManager = settingsManager;
     }
 
-    render(part, selectionAnchor = null) {
+    render(part, selectionAnchor = null, isModifierHeld = false) {
         if (!this.container || !part) return;
 
         const content = part.content || "";

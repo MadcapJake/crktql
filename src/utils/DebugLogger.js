@@ -30,6 +30,18 @@ export class DebugLogger {
         this.logs = [];
         this.startTime = Date.now(); // Reset relative timer
     }
+    download() {
+        const text = this.export();
+        const blob = new Blob([text], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `crktql_logs_${Date.now()}.txt`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
 }
 
 export const logger = new DebugLogger();

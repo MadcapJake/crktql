@@ -103,22 +103,30 @@ export class InputRouter {
                 break;
 
             case 'RENAMING':
-                // Handled by main.js inline logic usually, or EditorMode?
-                // Step 5057 shows RENAMING mode setting.
-                // But where is the input handler block?
-                // I might have missed it in previous view.
-                // It was not in the switch check in Step 5144.
-                // Does 'RENAMING' exist in switch? No.
-                // So renaming input falls through?
-                // Wait, if mode is RENAMING, switch has no case.
+                // Typing Input
+                if (this.deps.typingEngine) {
+                    this.deps.typingEngine.processFrame(gamepad);
+                }
 
-                // Let's assume RENAMING uses typing engine directly or is handled by EditorMode?
-                // Or I missed the case.
-                // Main Loop Step 800+ didn't show it.
-                // If it's missing, Renaming won't work.
-                // I should add a case or check main.js again.
-                // Assuming it was lost or not implemented fully in my view.
-                // I'll leave it as TODO or add default case?
+                // Save: Start or South (A)
+                if ((startPressed && !gamepadManager.lastStart) || (frameInput.buttons.south && !gamepadManager.lastButtons?.south)) {
+                    const newName = this.deps.typingEngine.getBufferText();
+                    console.log('[Renaming] Committing:', newName);
+
+                    const target = this.deps.focusManager.renameTarget;
+                    if (target) {
+                        this.deps.bookManager.renamePart(target.oldName, newName);
+                        this.deps.gridOverview.render(); // Ensure grid reflects change
+                    }
+
+                    this.deps.focusManager.setMode('OVERVIEW');
+                }
+
+                // Cancel: Select or East (B)
+                if ((selectPressed && !gamepadManager.lastSelect) || (frameInput.buttons.east && !gamepadManager.lastButtons?.east)) {
+                    console.log('[Renaming] Cancelled');
+                    this.deps.focusManager.setMode('OVERVIEW');
+                }
                 break;
         }
 

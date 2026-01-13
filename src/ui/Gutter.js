@@ -45,6 +45,9 @@ export class Gutter {
             if (id === 'help-btn') {
                 window.dispatchEvent(new CustomEvent('request-help-toggle', { detail: { input } }));
                 el.click();
+            } else if (id === 'export-logs-btn') {
+                window.dispatchEvent(new CustomEvent('request-export-logs'));
+                el.click(); // Optional visual feedback
             } else {
                 el.click();
             }

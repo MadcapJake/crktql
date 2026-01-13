@@ -224,7 +224,8 @@ const inputRouter = new InputRouter({
   bookMenu,
   helpManager,
   gridOverview,
-  gamepadManager
+  gamepadManager,
+  typingEngine
 });
 
 // Initialize Calibration Manager
@@ -279,7 +280,20 @@ function updateStatusText(mode) {
     if (modeIcon) modeIcon.innerHTML = '<i class="fa-solid fa-eye"></i>';
     if (caseIcon) caseIcon.style.display = 'none';
   } else if (mode === 'EDITOR' || mode === 'RENAMING') {
-    if (modeIcon) modeIcon.innerHTML = '<i class="fa-solid fa-border-none"></i>';
+    if (modeIcon) {
+      let isModifier = false;
+      try {
+        const gp = gamepadManager.getActiveGamepad();
+        if (gp && typingEngine && typingEngine.mapper) {
+          const mapped = typingEngine.mapper.map(gp);
+          if (mapped && mapped.buttons && mapped.buttons.north) {
+            isModifier = true;
+          }
+        }
+      } catch (e) { console.warn("Status Icon Modifier Check Failed", e); }
+
+      modeIcon.innerHTML = isModifier ? '<i class="fa-solid fa-pause"></i>' : '<i class="fa-solid fa-border-none"></i>';
+    }
     if (caseIcon) caseIcon.style.display = 'flex';
   } else {
     if (caseIcon) caseIcon.style.display = 'flex'; // Default show
@@ -578,6 +592,8 @@ settingsManager.render();
 settingsManager.onUpdate(settingsManager.config);
 updateStatusText(focusManager.mode); // Ensure initial status text is shown
 
+
+// Handle Gamepad Connection
 // Handle Gamepad Connection
 window.addEventListener("gamepadconnected", (e) => {
   const gp = e.gamepad;
@@ -625,11 +641,67 @@ window.addEventListener('request-rename', (e) => {
 
   focusManager.setMode('RENAMING');
 
-  // Force immediate render so we don't see the old content even for a frame
   editorRenderer.render({
     content: initialName,
     cursor: initialName.length
   });
+});
+
+window.addEventListener('request-help-toggle', (e) => {
+  const input = e.detail?.input;
+  helpManager.toggle(input);
+});
+
+// Replaced static listener with global event listener
+// Fallback clipboard method
+const fallbackCopy = (text) => {
+  try {
+    const textArea = document.createElement("textarea");
+    textArea.value = text;
+    textArea.style.position = "fixed";  // Avoid scrolling to bottom
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    const successful = document.execCommand('copy');
+    document.body.removeChild(textArea);
+    if (successful) {
+      showNotification('Debug logs copied (fallback)!', 3000);
+    } else {
+      console.error("Fallback copy failed.");
+      window.prompt("Copy logs manually:", text);
+    }
+  } catch (err) {
+    console.error('Fallback: Oops, unable to copy', err);
+    window.prompt("Copy logs manually:", text);
+  }
+};
+
+window.addEventListener('request-export-logs', () => {
+  // Collect all logs: Console + History
+  const consoleLogs = logger.export();
+  const historyLogs = historyManager.exportLogs();
+
+  const combined = `=== CONSOLE LOGS ===\n${consoleLogs}\n\n=== HISTORY LOGS ===\n${historyLogs}`;
+
+  // 1. Always log to console as backup
+  console.log("--- DEBUG LOG EXPORT ---");
+  console.log(combined);
+  console.log("------------------------");
+
+  // 2. Try Clipboard API
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(combined).then(() => {
+      showNotification('Debug logs copied to clipboard!', 3000);
+    }).catch(err => {
+      console.error('Clipboard API failed', err);
+      fallbackCopy(combined);
+    });
+  } else {
+    fallbackCopy(combined);
+  }
+
+  // 3. Download File (Original behavior)
+  logger.download();
 });
 
 window.addEventListener('request-citation-insert', (e) => {
@@ -729,6 +801,9 @@ if (bookManager.loadFromStorage()) {
       if (typeof editorRenderer !== 'undefined') editorRenderer.render(part, null);
     }
     focusManager.setMode('EDITOR');
+
+    // Fix Duplication: Ensure EditorMode knows about the loaded content
+    if (typeof editorMode !== 'undefined') editorMode.resetState();
   }, 100);
 } else {
   // New Session
