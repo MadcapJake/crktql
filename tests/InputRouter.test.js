@@ -23,6 +23,7 @@ describe('InputRouter', () => {
             overviewMode: { handleInput: vi.fn() },
             editorMode: { handleInput: vi.fn() },
             visualSelectMode: { handleInput: vi.fn() },
+            renamingMode: { handleInput: vi.fn() }, // NEW
             settingsManager: {
                 isOpen: false,
                 handleInput: vi.fn(),
@@ -74,6 +75,10 @@ describe('InputRouter', () => {
         deps.focusManager.mode = 'GUTTER';
         router.route(createInput(), {});
         expect(deps.gutterMode.handleInput).toHaveBeenCalled();
+
+        deps.focusManager.mode = 'RENAMING';
+        router.route(createInput(), {});
+        expect(deps.renamingMode.handleInput).toHaveBeenCalled();
     });
 
     describe('User Scenario: Basic Gutter Tests', () => {

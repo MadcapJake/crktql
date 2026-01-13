@@ -2,6 +2,7 @@ export class InputRouter {
     constructor(deps) {
         this.deps = deps;
         this.confirmCallback = null;
+        this.lastRenamingState = null;
     }
 
     route(frameInput, gamepad) {
@@ -112,129 +113,10 @@ export class InputRouter {
     }
 
     handleRenaming(frameInput, gamepad) {
-        const { typingEngine, focusManager, editorRenderer, bookManager, gridOverview, overviewMode, historyManager } = this.deps;
-
-        // Mapping:
-        // B (East) -> Save
-        // Select -> Cancel
-        // A (South) -> Space (Typing)
-
-        const confirmPressed = frameInput.buttons.east; // B is Save
-        const cancelPressed = frameInput.buttons.select; // Select is Cancel
-
-        // Prevent Input Bleed helper
-        const syncOverviewInput = () => {
-            if (overviewMode) {
-                // Manually update lastButtons so Overview doesn't see this press as a 'new' press next frame
-                overviewMode.lastButtons = JSON.parse(JSON.stringify(frameInput.buttons));
-            }
-        };
-
-        if (confirmPressed) {
-            // Save Name
-            const newName = typingEngine.getBufferText();
-            const { x, y, oldName } = focusManager.renameTarget;
-
-            // 1. Update Data
-            bookManager.renamePart(x, y, newName);
-            bookManager.saveToStorage();
-
-            // 2. Push History
-            if (historyManager) {
-                historyManager.push({
-                    type: 'RENAME_PART',
-                    partKey: `${x},${y}`,
-                    data: { x, y, oldName, newName }
-                });
-            }
-
-            syncOverviewInput();
-            focusManager.setMode('OVERVIEW');
-            if (gridOverview) gridOverview.render();
-        }
-        else if (cancelPressed) {
-            // Cancel
-            syncOverviewInput();
-            focusManager.setMode('OVERVIEW');
-        }
-        else {
-            // D-Pad Navigation (Cursor)
-            const dpad = frameInput.buttons.dpad;
-            const lastDpad = this.deps.gamepadManager.lastButtons?.dpad || {};
-
-            const txt = typingEngine.getBufferText();
-            let cur = typingEngine.state.cursor;
-
-            // Note: Initialize cursor if undefined (caused by TypingEngine reset quirks)
-            if (typeof cur === 'undefined') cur = txt.length;
-
-            if (dpad.left && !lastDpad.left) {
-                cur = Math.max(0, cur - 1);
-            }
-            if (dpad.right && !lastDpad.right) {
-                cur = Math.min(txt.length, cur + 1);
-            }
-
-            // Sync back to Engine
-            typingEngine.state.cursor = cur;
-
-            // Typing (Includes A/South for Space)
-            typingEngine.processFrame(gamepad);
-
-            // Typing might have updated cursor (if we added it to engine) 
-            // OR if engine appended text, cursor should advance.
-            // Since Engine is generic, it might NOT advance 'cursor' property. 
-            // We need to detect length change?
-            const newTxt = typingEngine.getBufferText();
-            if (newTxt.length > txt.length) {
-                // Character added. 
-                // Because Engine appends, it went to end? 
-                // OR we want to support insertion at cursor? 
-                // For MVP Renaming: Engine appends. We probably just want cursor to follow end if at end?
-                // Or if we are editing in middle, we must handle insertion manually.
-
-                // CRITICAL: processFrame() calls typeCharacter(char) -> state.text += char.
-                // It does NOT support insertion. 
-                // So typing always appends. 
-                // If user moves cursor left and types, it still appends to end? 
-                // YES, with current Engine.
-
-                // FIX: If cursor < txt.length, we must splice the new char?
-                // Too complex for 'InputRouter'. 
-                // BUT user just wants to fix typos. 
-                // For now, let's allow cursor movement. 
-                // If they type, it appends. 
-                // Changing this strictly requires Engine rewrite.
-                // However, user said "cursor doesn't move". 
-                // Let's at least allow movement.
-
-                // Update cursor to end if we just typed?
-                if (cur === txt.length) {
-                    cur = newTxt.length;
-                } else {
-                    // We typed at end (appended). Cursor stays where it was? No. 
-                    // If we typed, we probably want to see it. 
-                    // Let's leave cursor logic simple for now: Navigation works. Typing appends.
-                }
-
-                // Actually, if we want to fix "Typing in middle", we need a smarter/modified Engine.
-                // But let's deliver the Navigation request first.
-            }
-            // Re-read cursor in case engine changed it (it won't)
-
-            // Render Update
-            if (editorRenderer) {
-                const finalTxt = typingEngine.getBufferText();
-                // Ensure state matches what we calculated
-                typingEngine.state.cursor = cur;
-
-                console.log(`[Renaming] Render: "${finalTxt}" Cursor: ${cur}`);
-
-                editorRenderer.render({
-                    content: finalTxt,
-                    cursor: cur
-                });
-            }
+        if (this.deps.renamingMode) {
+            this.deps.renamingMode.handleInput(frameInput, gamepad);
+        } else {
+            console.error("RenamingMode dependency missing in InputRouter");
         }
     }
 

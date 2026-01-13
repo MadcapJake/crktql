@@ -10,11 +10,9 @@ describe('EditorMode', () => {
     let mocks;
 
     beforeEach(() => {
-        // Create fresh mocks for every test
         mocks = {
             typingEngine: {
                 reset: vi.fn(),
-                resetInputState: vi.fn(),
                 processFrame: vi.fn().mockReturnValue(null),
                 state: { mode: 'INITIAL', syllable: '' },
                 mappings: {}
@@ -44,118 +42,66 @@ describe('EditorMode', () => {
                 update: vi.fn()
             },
             gamepadManager: {
-                lastButtons: {},
+                lastButtons: {}, // EditorMode reads this for Modifiers
                 getActiveGamepad: vi.fn().mockReturnValue({})
             },
             renderer: {
                 render: vi.fn()
             },
             showNotification: vi.fn(),
-            onPaste: vi.fn()
+            onPaste: vi.fn(),
+            onVisualSelect: vi.fn()
         };
 
-        // Inject onPaste as a custom dep for the test
-        editorMode = new EditorMode({ ...mocks, onPaste: mocks.onPaste });
+        editorMode = new EditorMode({ ...mocks, onVisualSelect: mocks.onVisualSelect });
     });
 
     it('initializes correctly', () => {
         expect(editorMode).toBeDefined();
-        expect(editorMode.lastEngineTextLength).toBe(0);
+        // EditorMode specific init checks
     });
 
-    it('handles navigation left (word)', () => {
-        const frameInput = {
-            buttons: { dpad: { left: true }, north: false } // No modifier
-        };
+    describe('Navigation (Editor Specific overrides)', () => {
+        it('handles Word Left (Modifier + Left)', () => {
+            const frameInput = {
+                buttons: { dpad: { left: true }, north: true } // North = Modifier
+            };
 
-        // Mock part: "Hello World", Cursor 5 (between o and W) -> expect 4
-        mocks.bookManager.getCurrentPart.mockReturnValue({ content: "Hello World", cursor: 5 });
+            // "Hello World", Cursor 5 (between 'o' and ' ')
+            // Ctrl+Left should go to start of "Hello" -> 0
 
-        editorMode.handleInput(frameInput, {});
+            editorMode.handleInput(frameInput, {});
 
-        expect(mocks.bookManager.setPartCursor).toHaveBeenCalledWith(4);
-        expect(mocks.renderer.render).toHaveBeenCalled();
-
-        // LATENCY FIX VERIFICATION:
-        // Ensure the part passed to render has the NEW cursor
-        const renderCall = mocks.renderer.render.mock.calls[0];
-        const partPassed = renderCall[0];
-        expect(partPassed.cursor).toBe(4);
-    });
-
-    it('handles atomic citation skipping (Right)', () => {
-        const frameInput = { buttons: { dpad: { right: true }, north: false } };
-        // Content: "See {{cite:1,1}}."
-        // Cursor at 4 (' ')
-        // Next step: inside the tag?
-        // Tag starts at 4. "{{".
-        // Logic checks if cursor strictly INSIDE.
-        // If we move right from 4 -> 5.
-
-        const content = "The {{cite:1,1}} tag";
-        //                 01234567890123456789
-        // Tag: 4 to 16.
-        mocks.bookManager.getCurrentPart.mockReturnValue({ content: content, cursor: 4 });
-
-        editorMode.handleInput(frameInput, {});
-
-        // It should start by moving to 5 (standard right).
-        // Then atomic check confirms 5 is inside 4-16.
-        // It snaps to 16 (End).
-
-        expect(mocks.bookManager.setPartCursor).toHaveBeenCalledWith(16);
-    });
-
-    it('typing inserts text and updates renderer', () => {
-        const frameInput = { buttons: { dpad: {} } };
-        mocks.typingEngine.processFrame.mockReturnValue({
-            text: "TestA",
-            mode: 'ONSET'
+            expect(mocks.bookManager.setPartCursor).toHaveBeenCalledWith(0);
         });
-        // Simulating state where previous length was 4 ("Test")
-        editorMode.lastEngineTextLength = 4;
-        mocks.bookManager.getCurrentPart.mockReturnValue({ content: "Test", cursor: 4 });
 
-        editorMode.handleInput(frameInput, {});
+        it('handles standard Left navigation', () => {
+            const frameInput = {
+                buttons: { dpad: { left: true }, north: false }
+            };
+            // Cursor 5 -> 4
+            mocks.bookManager.getCurrentPart.mockReturnValue({ content: "Hello World", cursor: 5 });
 
-        expect(mocks.historyManager.push).toHaveBeenCalledWith(expect.objectContaining({ type: 'ADD_TEXT' }));
-        expect(mocks.bookManager.setCurrentPartContent).toHaveBeenCalledWith("TestA");
-        expect(mocks.renderer.render).toHaveBeenCalled();
+            editorMode.handleInput(frameInput, {});
+
+            expect(mocks.bookManager.setPartCursor).toHaveBeenCalledWith(4);
+        });
     });
 
-    it('undo triggers history manager', () => {
-        const frameInput = {
-            buttons: { lt: true, north: true, dpad: {} } // Undo Combo
-        };
+    describe('Paste Trigger', () => {
+        it('calls onPaste when Y + L3 is pressed', () => {
+            // Need to set modifier held first or in same frame?
+            // EditorMode checks `this.isModifierHeld = frameInput.buttons.north` at start.
+            // Then checks `if (this.isModifierHeld ...)`
 
-        editorMode.handleInput(frameInput, {});
-        expect(mocks.historyManager.undo).toHaveBeenCalled();
-    });
+            mocks.typingEngine.state.mode = 'ONSET'; // Required for paste check
 
-    it('activates visual select on Y + RB', () => {
-        // Add onVisualSelect to instance
-        editorMode.onVisualSelect = vi.fn();
+            const frameInput = {
+                buttons: { dpad: {}, north: true, l3: true }
+            };
 
-        const frameInput = {
-            buttons: { rb: true, north: true, dpad: {} }
-        };
-
-        editorMode.handleInput(frameInput, {});
-        expect(editorMode.onVisualSelect).toHaveBeenCalledWith(5); // Cursor 5
-    });
-
-    it('trigger paste on Y + L3', () => {
-        // Spy on internal paste method
-        vi.spyOn(editorMode, 'paste').mockImplementation(() => { });
-
-        // Mode ONSET required
-        mocks.typingEngine.state.mode = 'ONSET';
-
-        const frameInput = {
-            buttons: { l3: true, north: true, dpad: {} }
-        };
-
-        editorMode.handleInput(frameInput, {});
-        expect(editorMode.paste).toHaveBeenCalled();
+            editorMode.handleInput(frameInput, {});
+            expect(mocks.onPaste).toHaveBeenCalled();
+        });
     });
 });

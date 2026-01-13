@@ -15,6 +15,7 @@ import { GutterMode } from './modes/GutterMode.js';
 import { GridOverview } from './ui/GridOverview.js';
 import { HistoryManager } from './data/HistoryManager.js';
 import { EditorRenderer } from './ui/EditorRenderer.js';
+import { RenamingMode } from './modes/RenamingMode.js';
 import { EditorMode } from './modes/EditorMode.js';
 import { VisualSelectMode } from './modes/VisualSelectMode.js';
 import { OverviewMode } from './modes/OverviewMode.js';
@@ -204,6 +205,7 @@ const editorMode = new EditorMode({
   historyManager,
   focusManager,
   gridOverview,
+  overviewMode,
   visualizer,
   gamepadManager,
   renderer: editorRenderer,
@@ -225,12 +227,23 @@ const visualSelectMode = new VisualSelectMode({
   showNotification: (msg) => showNotification(msg)
 });
 
+const renamingMode = new RenamingMode({
+  typingEngine,
+  bookManager,
+  historyManager,
+  focusManager,
+  gridOverview,
+  overviewMode,
+  editorRenderer
+});
+
 const inputRouter = new InputRouter({
   focusManager,
   gutterMode,
   overviewMode,
   editorMode,
   visualSelectMode,
+  renamingMode,
   settingsManager,
   gamepadMenu,
   bookMenu,
@@ -321,13 +334,12 @@ function updateStatusText(mode) {
   if (mode === 'OVERVIEW') {
     const isUpdate = !!focusManager.citationUpdateTarget;
     const updateText = isUpdate
-      ? `Update (Current: ${overviewMode.cursor.x}, ${overviewMode.cursor.y})`
+      ? `Update (<strong>Prev:</strong> ${overviewMode.cursor.x}, ${overviewMode.cursor.y})`
       : `Cite`;
 
     html = `
             <span class="notification-persistent">
                 <i class="fa-solid fa-arrows-up-down-left-right icon-purple"></i> Pan&emsp;
-                <i class="fa-solid fa-y icon-yellow"></i><i class="fa-solid fa-plus"></i> <i class="fa-solid fa-arrows-up-down-left-right icon-purple"></i> Jump&emsp;
                 <i class="fa-solid fa-x icon-blue"></i> <strong>Hold 3s:</strong> Delete&emsp;
                 <i class="fa-solid fa-y icon-yellow"></i> Rename&emsp;
                 <i class="fa-solid fa-b icon-red"></i> ${updateText}

@@ -222,14 +222,7 @@ export class OverviewMode {
     }
 
     jumpToEdge(dx, dy) {
-        // We need viewport info. gridOverview can provide it?
-        // Or we duplicate the calculation. 
-        // Ideally, gridOverview returns the 'screen capacity'.
-        // For MVP, allow gridOverview to handle "jumpToEdge"? 
-        // No, we want logic here. 
-        // Let's ask gridOverview for page size.
         const pageSize = this.gridOverview.getPageSize(this.zoomLevel);
-        // We will implement getPageSize in GridOverview.
 
         if (dx === -1) this.cursor.x -= pageSize.cols;
         if (dx === 1) this.cursor.x += pageSize.cols;
@@ -237,10 +230,15 @@ export class OverviewMode {
         if (dy === -1) this.cursor.y -= pageSize.rows;
     }
 
-    // Support sync from main loop restore
     syncInputState(input) {
         if (input && input.buttons) {
-            this.lastButtons = { ...input.buttons };
+            this.lastButtons = { ...input.buttons, dpad: { ...input.buttons.dpad } };
+
+            // If North is held during sync, imply it was used/held externally, so ignore release.
+            if (input.buttons.north) {
+                this.ignoreNextRename = true;
+            }
         }
     }
+
 }

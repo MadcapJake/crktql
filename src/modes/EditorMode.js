@@ -1,20 +1,25 @@
+import { TextEntryMode } from './TextEntryMode.js';
 
-export class EditorMode {
+export class EditorMode extends TextEntryMode {
     constructor(deps) {
-        this.typingEngine = deps.typingEngine;
+        super(deps);
         this.bookManager = deps.bookManager;
         this.historyManager = deps.historyManager;
         this.focusManager = deps.focusManager;
         this.gridOverview = deps.gridOverview;
+        this.overviewMode = deps.overviewMode;
         this.visualizer = deps.visualizer;
         this.gamepadManager = deps.gamepadManager;
         this.renderer = deps.renderer; // EditorRenderer instance
         this.showNotification = deps.showNotification; // Callback
         this.onVisualSelect = deps.onVisualSelect; // Callback
+        this.onPaste = deps.onPaste; // Callback for testing/external handling
 
 
         // State
-        this.lastDpad = { up: false, down: false, left: false, right: false };
+        // lastDpad is handled by super, but EditorMode uses local tracking for now if unrelated?
+        // Actually, super.lastDpad exists. We can use it or shadow it. EditorMode writes to this.lastDpad.
+        // It's fine to rely on super's property if we initialize it. super handles it.
         this.lastEngineTextLength = 0;
         this.selectionAnchor = null;
     }
@@ -58,7 +63,7 @@ export class EditorMode {
             // Sync render and engine
             part.content = newContent;
             part.cursor = cursor + 1;
-            this.renderer.render(part, this.selectionAnchor);
+            this.renderIfChanged(this.renderer, part.content, part.cursor, part, this.selectionAnchor);
             this.typingEngine.reset(newContent);
             this.lastEngineTextLength = newContent.length;
         }
@@ -84,7 +89,7 @@ export class EditorMode {
                 // Sync render and engine
                 part.content = newContent;
                 part.cursor = target;
-                this.renderer.render(part, this.selectionAnchor);
+                this.renderIfChanged(this.renderer, part.content, part.cursor, part, this.selectionAnchor);
                 this.typingEngine.reset(newContent);
                 this.lastEngineTextLength = newContent.length;
 
@@ -115,7 +120,7 @@ export class EditorMode {
         // We should force render if modifier state changes.
         if (this.gamepadManager.lastButtons?.north !== frameInput.buttons.north) {
             const part = this.bookManager.getCurrentPart();
-            if (part) this.renderer.render(part, this.selectionAnchor, this.isModifierHeld);
+            if (part) this.renderIfChanged(this.renderer, part.content, part.cursor, part, this.selectionAnchor, this.isModifierHeld);
 
             // Toggle Status Icon
             const modeIcon = document.getElementById('mode-indicator');
@@ -361,7 +366,7 @@ export class EditorMode {
 
                 this.focusManager.citationUpdateTarget = { start: tagStart, end: tagEnd };
                 this.focusManager.setMode('OVERVIEW');
-                this.gridOverview.syncInputState(frameInput);
+                if (this.overviewMode) this.overviewMode.syncInputState(frameInput);
                 this.gridOverview.setLinkTarget({ x: tx, y: ty });
 
                 const currentPart = this.bookManager.getCurrentPart();
@@ -373,7 +378,6 @@ export class EditorMode {
                 requestAnimationFrame(() => {
                     requestAnimationFrame(() => {
                         this.gridOverview.setCursor(tx, ty);
-                        this.gridOverview.ignoreNextRename = true;
                     });
                 });
 
@@ -491,86 +495,41 @@ export class EditorMode {
             }
 
             // 2. Delta Text
-            const currentEngineText = state.text;
-            const diff = currentEngineText.length - this.lastEngineTextLength;
-            let handledAtomic = false;
-
-            if (diff !== 0) {
-                let newContent = content;
-                let newCursor = cursor;
-
-                if (diff > 0) {
-                    // Insertion
-                    const added = currentEngineText.slice(this.lastEngineTextLength);
-                    newContent = content.slice(0, cursor) + added + content.slice(cursor);
-
-                    this.historyManager.push({
-                        type: 'ADD_TEXT',
-                        partKey: this.bookManager.currentPartKey,
-                        data: { text: added, index: cursor }
-                    });
-
-                    newCursor = cursor + diff;
-                } else {
-                    // Backspace
-                    const before = content.slice(0, cursor);
-                    if (before.endsWith('}}')) {
-                        const lastNewline = before.lastIndexOf('\n');
-                        const lineStart = lastNewline === -1 ? 0 : lastNewline + 1;
-                        const currentLineBeforeCursor = before.slice(lineStart);
-                        const match = currentLineBeforeCursor.match(/(\{\{cite:.*?\}\})$/);
-
-                        if (match) {
-                            const tag = match[1];
-                            const startIdx = cursor - tag.length;
-
-                            newContent = content.slice(0, startIdx) + content.slice(cursor);
-                            newCursor = startIdx;
-                            handledAtomic = true;
-
-                            this.historyManager.push({
-                                type: 'REMOVE_CITATION',
-                                partKey: this.bookManager.currentPartKey,
-                                data: { text: tag, index: startIdx }
-                            });
-
-                            this.typingEngine.reset(newContent);
-                            this.lastEngineTextLength = newContent.length;
-                        }
-                    }
-
-                    if (!handledAtomic) {
-                        const amount = -diff;
-                        const start = Math.max(0, cursor - amount);
-                        const removedText = content.slice(start, cursor);
-
-                        if (removedText.length > 0) {
-                            this.historyManager.push({
-                                type: 'REMOVE_TEXT',
-                                partKey: this.bookManager.currentPartKey,
-                                data: { text: removedText, index: start }
-                            });
-                        }
-
-                        newContent = content.slice(0, start) + content.slice(cursor);
-                        newCursor = start;
-                    }
+            const result = this.processTextChange(
+                content,
+                cursor,
+                state.text,
+                this.lastEngineTextLength,
+                {
+                    historyManager: this.historyManager,
+                    partKey: this.bookManager.currentPartKey
                 }
+            );
 
-                this.bookManager.setCurrentPartContent(newContent);
-                this.bookManager.setPartCursor(newCursor);
+            if (result.diff !== 0) {
+                if (result.newContent !== content) {
+                    this.bookManager.setCurrentPartContent(result.newContent);
+                    this.bookManager.setPartCursor(result.newCursor);
 
-                part.content = newContent;
-                part.cursor = newCursor;
-            }
+                    part.content = result.newContent;
+                    part.cursor = result.newCursor;
 
-            this.renderer.render(part, this.selectionAnchor);
-
-            if (!state.action && diff !== 0 && handledAtomic) {
-                // Done
+                    // If atomic or explicit text change, sync engine
+                    this.typingEngine.reset(result.newContent);
+                    this.lastEngineTextLength = result.newContent.length;
+                } else {
+                    // Check if length matches what we thought, mostly for safety
+                    this.lastEngineTextLength = result.newLength;
+                }
             } else {
-                this.lastEngineTextLength = currentEngineText.length;
+                this.lastEngineTextLength = result.newLength;
             }
+
+            this.renderIfChanged(this.renderer, part.content, part.cursor, part, this.selectionAnchor);
+
+            // "handledAtomic" check in original was just to avoid overwriting lastLength, but we handled that.
+            // visualizer update follows.
+
 
             this.visualizer.update(frameInput, state.mode, this.typingEngine.mappings, this.typingEngine.state.syllable);
         }
@@ -578,6 +537,10 @@ export class EditorMode {
     }
 
     async paste() {
+        if (this.onPaste) {
+            this.onPaste();
+            return;
+        }
         try {
             const text = await navigator.clipboard.readText();
             if (!text) return;
@@ -603,7 +566,7 @@ export class EditorMode {
             part.content = newContent;
             part.cursor = cursor + text.length;
 
-            this.renderer.render(part, this.selectionAnchor);
+            this.renderIfChanged(this.renderer, part.content, part.cursor, part, this.selectionAnchor);
             this.typingEngine.reset(newContent);
             this.lastEngineTextLength = newContent.length;
 
