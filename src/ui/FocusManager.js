@@ -1,7 +1,7 @@
 
 export class FocusManager {
     constructor() {
-        this.mode = 'EDITOR'; // EDITOR, OVERVIEW, BOTTOM_BAR, DIALOG_CONFIRM, RENAMING, BOOK_MENU, SETTINGS_MENU, GAMEPAD_MENU
+        this.mode = 'EDITOR'; // EDITOR, OVERVIEW, GUTTER, DIALOG_CONFIRM, RENAMING, BOOK_MENU, SETTINGS_MENU, GAMEPAD_MENU
         this.previousMode = 'EDITOR';
         this.onChange = null;
     }
@@ -9,7 +9,13 @@ export class FocusManager {
     setMode(newMode) {
         if (this.mode === newMode) return;
 
-        this.previousMode = this.mode;
+        // Only track previous mode if it's a "Major" mode
+        // Don't track menus as history points
+        const transientModes = ['BOOK_MENU', 'SETTINGS_MENU', 'GAMEPAD_MENU', 'DIALOG_CONFIRM'];
+        if (!transientModes.includes(this.mode)) {
+            this.previousMode = this.mode;
+        }
+
         this.mode = newMode;
 
         if (this.onChange) this.onChange(this.mode);
@@ -21,22 +27,19 @@ export class FocusManager {
             this.setMode('OVERVIEW');
         } else if (this.mode === 'OVERVIEW') {
             this.setMode('EDITOR');
-        } else if (this.mode === 'BOTTOM_BAR') {
-            // If in bottom bar, where do we go? 
-            // Usually back to what lies beneath, or force overview?
-            // User spec says: "Pressing select while Book Overview activated -> Editor"
-            // It doesn't explicitly handle Bottom Bar -> Select. 
-            // Let's assume Select always toggles Editor/Overview stack.
+        } else if (this.mode === 'GUTTER') {
+            // Force Overview
             this.setMode('OVERVIEW');
         }
     }
 
     toggleBottomBar() {
-        if (this.mode === 'BOTTOM_BAR') {
-            // Return to previous interaction layer
-            this.setMode(this.previousMode === 'BOTTOM_BAR' ? 'EDITOR' : this.previousMode);
+        if (this.mode === 'GUTTER') {
+            // Return to previous interaction layer (Filter out menus)
+            const target = ['EDITOR', 'OVERVIEW', 'VISUAL_SELECT'].includes(this.previousMode) ? this.previousMode : 'EDITOR';
+            this.setMode(target);
         } else {
-            this.setMode('BOTTOM_BAR');
+            this.setMode('GUTTER');
         }
     }
 }

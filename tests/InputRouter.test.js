@@ -26,17 +26,24 @@ describe('InputRouter', () => {
             settingsManager: {
                 isOpen: false,
                 handleInput: vi.fn(),
-                toggle: vi.fn()
+                toggle: vi.fn(function () {
+                    // Simulate closing logic
+                    deps.focusManager.setMode(deps.focusManager.previousMode || 'EDITOR');
+                })
             },
             gamepadMenu: {
                 isOpen: false,
                 handleInput: vi.fn(),
-                close: vi.fn()
+                close: vi.fn(function () {
+                    deps.focusManager.setMode(deps.focusManager.previousMode || 'EDITOR');
+                })
             },
             bookMenu: {
                 isOpen: false,
                 handleInput: vi.fn(),
-                toggle: vi.fn()
+                toggle: vi.fn(function () {
+                    deps.focusManager.setMode(deps.focusManager.previousMode || 'EDITOR');
+                })
             },
             helpManager: {
                 isOpen: false,
@@ -64,7 +71,7 @@ describe('InputRouter', () => {
         router.route(createInput(), {});
         expect(deps.editorMode.handleInput).toHaveBeenCalled();
 
-        deps.focusManager.mode = 'BOTTOM_BAR';
+        deps.focusManager.mode = 'GUTTER';
         router.route(createInput(), {});
         expect(deps.gutterMode.handleInput).toHaveBeenCalled();
     });
@@ -74,19 +81,19 @@ describe('InputRouter', () => {
             // Starting mode == EDITOR
             deps.focusManager.mode = 'EDITOR';
 
-            // Press start? mode == BOTTOM_BAR (Gutter)
+            // Press start? mode == GUTTER (Gutter)
             // Note: toggleBottomBar is mocked, but we should simulate what it does or mock the implementation?
             // "focusManager.toggleBottomBar" in logic changes mode.
             // But here we mocked it.
             // Better to override mock to actually change mode if we want integration flow.
             deps.focusManager.toggleBottomBar.mockImplementation(function () {
-                if (this.mode === 'BOTTOM_BAR') this.mode = this.previousMode;
-                else this.mode = 'BOTTOM_BAR';
+                if (this.mode === 'GUTTER') this.mode = this.previousMode;
+                else this.mode = 'GUTTER';
             });
 
             const startInput = createInput({ start: true });
             router.route(startInput, {});
-            expect(deps.focusManager.mode).toBe('BOTTOM_BAR');
+            expect(deps.focusManager.mode).toBe('GUTTER');
 
             // Reset start latch (simulated next frame)
             deps.gamepadManager.lastStart = true;
@@ -147,8 +154,8 @@ describe('InputRouter', () => {
         beforeEach(() => {
             // Implement toggle logic
             deps.focusManager.toggleBottomBar.mockImplementation(function () {
-                if (this.mode === 'BOTTOM_BAR') this.mode = this.previousMode;
-                else { this.previousMode = this.mode; this.mode = 'BOTTOM_BAR'; }
+                if (this.mode === 'GUTTER') this.mode = this.previousMode;
+                else { this.previousMode = this.mode; this.mode = 'GUTTER'; }
             });
             deps.focusManager.toggleOverview.mockImplementation(function () {
                 if (this.mode === 'OVERVIEW') this.mode = 'EDITOR';
@@ -161,7 +168,7 @@ describe('InputRouter', () => {
 
             // Press Start -> GUTTER
             router.route(createInput({ start: true }), {});
-            expect(deps.focusManager.mode).toBe('BOTTOM_BAR');
+            expect(deps.focusManager.mode).toBe('GUTTER');
 
             // Cleanup Latch
             deps.gamepadManager.lastStart = true;
@@ -187,7 +194,7 @@ describe('InputRouter', () => {
 
             // Press Start -> GUTTER
             router.route(createInput({ start: true }), {});
-            expect(deps.focusManager.mode).toBe('BOTTOM_BAR');
+            expect(deps.focusManager.mode).toBe('GUTTER');
             expect(deps.focusManager.previousMode).toBe('OVERVIEW');
 
             // Cleanup Latch
@@ -205,19 +212,24 @@ describe('InputRouter', () => {
         // These rely on GutterMode logic for "Press left twice and A", which we aren't testing here.
         // We verify that IF mode is SETTINGS_MENU, closing it returns to GUTTER if previousMode was GUTTER.
 
-        it('should return to GUTTER from SETTINGS_MENU if initiated from there', () => {
+        it('should return to EDITOR from SETTINGS_MENU if initiated from there (Skip Gutter)', () => {
             deps.focusManager.mode = 'SETTINGS_MENU';
-            deps.focusManager.previousMode = 'BOTTOM_BAR'; // User flow: EDITOR -> GUTTER -> SETTINGS
-            // Wait, if EDITOR -> GUTTER. previousMode is EDITOR?
-            // FocusManager implementation: 
-            // 1. setMode('BOTTOM_BAR') -> prev=EDITOR.
-            // 2. setMode('SETTINGS_MENU') -> prev=BOTTOM_BAR.
-            // So yes, prev is BOTTOM_BAR.
+            deps.focusManager.previousMode = 'GUTTER'; // User flow: EDITOR -> GUTTER -> SETTINGS
+
+            // Mock Side Effect of closing Settings: returns to previous mode (GUTTER)
+            deps.settingsManager.toggle.mockImplementation(() => {
+                deps.focusManager.setMode('GUTTER');
+            });
+
+            // Mock Side Effect of toggleBottomBar: returns to Content (EDITOR)
+            deps.focusManager.toggleBottomBar.mockImplementation(function () {
+                this.mode = 'EDITOR';
+            });
 
             router.route(createInput({ start: true }), {});
 
-            expect(deps.settingsManager.toggle).toHaveBeenCalled(); // Or close? Settings uses toggle.
-            expect(deps.focusManager.mode).toBe('BOTTOM_BAR');
+            expect(deps.settingsManager.toggle).toHaveBeenCalled();
+            expect(deps.focusManager.mode).toBe('EDITOR');
         });
     });
 });

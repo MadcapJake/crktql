@@ -41,7 +41,7 @@ document.querySelector('#app').innerHTML = `
         <div class="modal-content">
             <h2 id="confirm-title">Confirm</h2>
             <p id="confirm-message" style="margin-bottom: 2rem; color: #ccc; text-align: center;">Are you sure?</p>
-            <div class="modal-footer">Press START to Confirm, B to Cancel</div>
+            <div class="modal-footer">Press <strong>B</strong> to Confirm, <strong>Start</strong> to Cancel</div>
         </div>
     </div>
 
@@ -183,7 +183,19 @@ settingsManager.onClose = () => {
   if (focusManager.mode === 'SETTINGS_MENU') focusManager.setMode(focusManager.previousMode || 'EDITOR');
 };
 bookMenu.onClose = () => {
-  if (focusManager.mode === 'BOOK_MENU') focusManager.setMode(focusManager.previousMode || 'EDITOR');
+  if (focusManager.mode === 'BOOK_MENU') {
+    const mode = focusManager.previousMode || 'EDITOR';
+    focusManager.setMode(mode);
+    if (mode === 'GUTTER') {
+      try {
+        const gp = gamepadManager.getActiveGamepad();
+        if (gp && typingEngine.mapper) {
+          const mapped = typingEngine.mapper.map(gp);
+          gutterMode.syncInputState(mapped);
+        }
+      } catch (e) { console.warn("Failed to sync gutter input", e); }
+    }
+  }
 };
 
 const editorMode = new EditorMode({
@@ -225,7 +237,10 @@ const inputRouter = new InputRouter({
   helpManager,
   gridOverview,
   gamepadManager,
-  typingEngine
+  typingEngine,
+  bookManager,
+  editorRenderer,
+  historyManager
 });
 
 // Initialize Calibration Manager
@@ -259,7 +274,7 @@ focusManager.onChange = (mode) => {
     }
   }
 
-  if (mode === 'BOTTOM_BAR') {
+  if (mode === 'GUTTER') {
     gutterMode.activate();
   } else {
     gutterMode.deactivate();
@@ -319,8 +334,7 @@ function updateStatusText(mode) {
             </span>
         `;
   } else if (mode === 'RENAMING') {
-    const part = bookManager.getCurrentPart();
-    const oldName = part ? part.name : 'Unknown';
+    const oldName = focusManager.renameTarget ? focusManager.renameTarget.oldName : 'Unknown';
     html = `
             <span class="notification-persistent">
                 <i class="fa-solid fa-b icon-red"></i> Rename Part (Prior Name: ${oldName})&emsp;
@@ -580,7 +594,7 @@ settingsManager.onUpdate = (config) => {
   typingEngine.onsetConflictMode = config.onsetConflict;
 
   // Refresh Editor to reflect cursor changes immediately
-  if (focusManager.mode === 'EDITOR' || focusManager.mode === 'BOTTOM_BAR' || settingsManager.isOpen) {
+  if (focusManager.mode === 'EDITOR' || focusManager.mode === 'GUTTER' || settingsManager.isOpen) {
     const part = bookManager.getCurrentPart();
     if (part) editorRenderer.render(part);
   }
@@ -846,6 +860,9 @@ function loop() {
 
   // --- Input Routing ---
   inputRouter.route(frameInput, gamepad);
+
+  // Update History (CRITICAL for debounce)
+  gamepadManager.updateLastButtons(frameInput);
 
 
 }

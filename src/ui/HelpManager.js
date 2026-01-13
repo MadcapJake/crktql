@@ -146,7 +146,7 @@ export class HelpManager {
 
         // CLOSE: A (South) -> Return to Bottom Bar
         if (buttons.south && !this.lastButtons.south) {
-            this.toggle(null, 'BOTTOM_BAR');
+            this.toggle(null, 'GUTTER');
             return;
         }
 

@@ -66,8 +66,47 @@ export class OverviewMode {
         if (buttons.lb && !this.lastButtons.lb) this.adjustZoom(0.2);
         if (buttons.rb && !this.lastButtons.rb) this.adjustZoom(-0.2);
 
+        const isMod = buttons.north; // Y Button (North)
+
+        // Undo: Y (North) + Left Trigger
+        if (isMod && buttons.lt && !this.lastButtons.lt) {
+            this.historyManager.undo().then(op => {
+                if (op) {
+                    // Handle Navigation
+                    if (op.navigateTo && op.navigateTo.mode === 'OVERVIEW') {
+                        this.cursor.x = op.navigateTo.x;
+                        this.cursor.y = op.navigateTo.y;
+                    }
+                    this.syncView();
+                    window.dispatchEvent(new CustomEvent('request-notification', { detail: `Undo: ${op.type}` }));
+                }
+            });
+            this.modUsedForNav = true; // Prevent Rename on release
+            this.ignoreNextRename = true; // Robust block
+            this.lastButtons.lt = true; // Consume
+            return;
+        }
+
+        // Redo: Y (North) + Right Trigger
+        if (isMod && buttons.rt && !this.lastButtons.rt) {
+            this.historyManager.redo().then(op => {
+                if (op) {
+                    if (op.navigateTo && op.navigateTo.mode === 'OVERVIEW') {
+                        this.cursor.x = op.navigateTo.x;
+                        this.cursor.y = op.navigateTo.y;
+                    }
+                    this.syncView();
+                    window.dispatchEvent(new CustomEvent('request-notification', { detail: `Redo: ${op.type}` }));
+                }
+            });
+            this.modUsedForNav = true; // Prevent Rename on release
+            this.ignoreNextRename = true; // Robust block
+            this.lastButtons.rt = true; // Consume
+            return;
+        }
+
         // 2. Navigation
-        const isMod = buttons.north;
+        // isMod already declared above
         if (now - this.lastMove > this.moveDelay) {
             let moved = false;
             let dx = 0;

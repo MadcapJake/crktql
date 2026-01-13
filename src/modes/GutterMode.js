@@ -64,6 +64,18 @@ export class GutterMode {
         this.lastAction = actionPressed;
     }
 
+    syncInputState(input) {
+        if (!input || !input.buttons) return;
+        const dpad = input.buttons.dpad || {};
+        const buttons = input.buttons;
+
+        this.lastNav = {
+            left: dpad.left || buttons.lb,
+            right: dpad.right || buttons.rb
+        };
+        this.lastAction = buttons.south;
+    }
+
     syncView() {
         this.gutter.setSelectedIndex(this.selectedIndex);
     }

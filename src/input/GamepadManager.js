@@ -17,6 +17,11 @@ export class GamepadManager {
             'active-change': []
         };
 
+        // Input History
+        this.lastStart = false;
+        this.lastSelect = false;
+        this.lastButtons = {};
+
         window.addEventListener("gamepadconnected", this.onGamepadConnected.bind(this));
         window.addEventListener("gamepaddisconnected", this.onGamepadDisconnected.bind(this));
 
@@ -150,5 +155,12 @@ export class GamepadManager {
         if (this.listeners[event]) {
             this.listeners[event].forEach(callback => callback(data));
         }
+    }
+
+    updateLastButtons(input) {
+        if (!input || !input.buttons) return;
+        this.lastStart = input.buttons.start;
+        this.lastSelect = input.buttons.select;
+        this.lastButtons = { ...input.buttons };
     }
 }
