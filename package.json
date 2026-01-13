@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "test": "vitest run",
+    "test": "vitest run --printConsoleTrace true --silent passed-only",
     "build": "vite build",
     "preview": "vite preview"
   },
