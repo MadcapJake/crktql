@@ -1,0 +1,69 @@
+{
+    "ONSET": {
+        "DEFAULT_VOWEL": "o",
+        "LEFT": {
+            "NORTH": "h",
+            "NORTH_EAST": "k",
+            "EAST": "t",
+            "SOUTH_EAST": "c",
+            "SOUTH": "f",
+            "SOUTH_WEST": "s",
+            "WEST": "n",
+            "NORTH_WEST": "l"
+        },
+        "RIGHT": {
+            "NORTH": "y",
+            "NORTH_EAST": "g",
+            "EAST": "d",
+            "SOUTH_EAST": "z",
+            "SOUTH": "b",
+            "SOUTH_WEST": "x",
+            "WEST": "m",
+            "NORTH_WEST": "w"
+        }
+    },
+    "RIME": {
+        "INSERT_ORDER": [
+            "VOWELS",
+            "CODA"
+        ],
+        "VOWELS": {
+            "NORTH": "i",
+            "NORTH_EAST": "û",
+            "EAST": "u",
+            "SOUTH_EAST": "ô",
+            "SOUTH": "o",
+            "SOUTH_WEST": "ê",
+            "WEST": "e",
+            "NORTH_WEST": "î"
+        },
+        "CODA": {
+            "NORTH": "k",
+            "EAST": "t",
+            "SOUTH_EAST": "c",
+            "SOUTH_WEST": "s",
+            "WEST": "n",
+            "NORTH_WEST": "l"
+        }
+    },
+    "PUNCTUATION": {
+        "LEFT": {
+            "NORTH": ";",
+            "NORTH_EAST": "“",
+            "EAST": "¿",
+            "SOUTH_EAST": ",",
+            "SOUTH": "«",
+            "SOUTH_WEST": "<",
+            "WEST": null,
+            "NORTH_WEST": null
+        },
+        "RIGHT": {
+            "NORTH": ":",
+            "NORTH_EAST": "”",
+            "EAST": "?",
+            "SOUTH_EAST": ".",
+            "SOUTH": "»",
+            "SOUTH_WEST": ">"
+        }
+    }
+}

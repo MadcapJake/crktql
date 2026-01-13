@@ -471,6 +471,9 @@ export class EditorMode extends TextEntryMode {
             // visualizer update follows.
 
 
+
+            this.visualizer.update(frameInput, state.mode, this.typingEngine.mappings, this.typingEngine.state.syllable);
+
             // Sync Icon
             const isJoystickActive = frameInput.sticks?.left?.active || false;
             this.focusManager.updateModeIcon(state.mode, this.isModifierHeld, isJoystickActive);

@@ -1,6 +1,16 @@
 import { InputMapper } from '../input/InputMapper.js';
 import { logger } from '../utils/DebugLogger.js';
 
+// Load all JSON mappings from src/mappings
+const mappingFiles = import.meta.glob('../mappings/*.json', { eager: true });
+const availableMappings = {};
+
+Object.keys(mappingFiles).forEach(path => {
+    // Extract filename without extension: "../mappings/Latin.json" -> "Latin"
+    const name = path.split('/').pop().replace(/\.json$/, '');
+    availableMappings[name] = mappingFiles[path].default || mappingFiles[path];
+});
+
 export class TypingEngine {
     constructor() {
         this.mapper = new InputMapper();
@@ -37,38 +47,28 @@ export class TypingEngine {
         this.DWELL_THRESHOLD = 60;
         this.onsetConflictMode = 'COMMIT'; // Default
 
-        this.mappings = {
-            ONSET: {
-                LEFT: {
-                    'NORTH': 'h', 'NORTH_EAST': 'k', 'EAST': 't', 'SOUTH_EAST': 'c',
-                    'SOUTH': 'f', 'SOUTH_WEST': 's', 'WEST': 'n', 'NORTH_WEST': 'l'
-                },
-                RIGHT: {
-                    'NORTH': 'y', 'NORTH_EAST': 'g', 'EAST': 'd', 'SOUTH_EAST': 'z',
-                    'SOUTH': 'b', 'SOUTH_WEST': 'x', 'WEST': 'm', 'NORTH_WEST': 'w'
-                }
-            },
-            RIME: {
-                VOWELS: {
-                    'NORTH': 'i', 'NORTH_EAST': 'û', 'EAST': 'u', 'SOUTH_EAST': 'ô',
-                    'SOUTH': 'o', 'SOUTH_WEST': 'e', 'WEST': 'ê', 'NORTH_WEST': 'î'
-                },
-                CODA: {
-                    'NORTH': 'k', 'EAST': 't', 'SOUTH_EAST': 'c',
-                    'SOUTH_WEST': 's', 'WEST': 'n', 'NORTH_WEST': 'l'
-                }
-            },
-            PUNCTUATION: {
-                LEFT: {
-                    'NORTH': ';', 'NORTH_EAST': '“', 'EAST': '¿', 'SOUTH_EAST': ',',
-                    'SOUTH': '«', 'SOUTH_WEST': '<', 'WEST': null, 'NORTH_WEST': null
-                },
-                RIGHT: {
-                    'NORTH': ':', 'NORTH_EAST': '”', 'EAST': '?', 'SOUTH_EAST': '.',
-                    'SOUTH': '»', 'SOUTH_WEST': '>'
-                }
-            }
+        // Load default mapping (Latin) or fallback to first available
+        this.currentMappingName = 'Latin';
+        this.mappings = availableMappings['Latin'] || Object.values(availableMappings)[0];
+
+        this.lastFrameSticks = {
+            left: { active: false, sector: null, enterTime: 0 },
+            right: { active: false, sector: null, enterTime: 0 }
         };
+    }
+
+    getAvailableMappings() {
+        return Object.keys(availableMappings);
+    }
+
+    setMapping(name) {
+        if (availableMappings[name]) {
+            this.currentMappingName = name;
+            this.mappings = availableMappings[name];
+            logger.log('SYSTEM', `Mapping switched to ${name}`);
+        } else {
+            console.error(`Mapping ${name} not found`);
+        }
     }
 
     processFrame(gamepad) {
@@ -122,10 +122,10 @@ export class TypingEngine {
         // whichPart: 'onset', 'vowel', 'coda'
         const processStick = (stickName, whichPart, map) => {
             const curStick = current.sticks[stickName];
-            const lastStick = last.sticks[stickName];
-            const stickState = this.state[`${stickName}Stick`];
+            const lastStick = this.lastFrameSticks[stickName] || { active: false, sector: null, enterTime: 0 };
+            const stickState = this.state[`${stickName}Stick`]; // Internal state tracking (lock, enterTime)
 
-            // 0. Lock Handling
+            // 1. Dwell / Active Handling
             if (!curStick.active) {
                 if (stickState.locked) logger.log('STICK', `${stickName} Unlocked`);
                 stickState.locked = false; // Unlock on release
@@ -180,8 +180,9 @@ export class TypingEngine {
                                         }
                                         else if (this.onsetConflictMode === 'COMMIT') {
                                             // Commit the EXISTING syllable (from other stick)
-                                            logger.log('CONFLICT_COMMIT', `Committed ${this.state.syllable.onset}o`);
-                                            this.typeCharacter(this.state.syllable.onset + 'o');
+                                            const defVowel = (this.mappings.ONSET.DEFAULT_VOWEL !== undefined) ? this.mappings.ONSET.DEFAULT_VOWEL : 'o';
+                                            logger.log('CONFLICT_COMMIT', `Committed ${this.state.syllable.onset}${defVowel}`);
+                                            this.typeCharacter(this.state.syllable.onset + defVowel);
                                             this.clearSyllable();
                                             this.consumeShift();
 
@@ -229,7 +230,8 @@ export class TypingEngine {
                 // Only commit if WE own the onset
                 if (this.state.syllable.onset && this.state.onsetOwner === stickName) {
                     let text = this.getFormattedSyllable();
-                    this.typeCharacter(text + 'o');
+                    const defVowel = (this.mappings.ONSET.DEFAULT_VOWEL !== undefined) ? this.mappings.ONSET.DEFAULT_VOWEL : 'o';
+                    this.typeCharacter(text + defVowel);
                     this.clearSyllable();
                     this.consumeShift();
                 }
@@ -258,6 +260,14 @@ export class TypingEngine {
             // Actually, let's use the 'onset' slot to buffer punctuation char, commit on release.
             processStick('left', 'onset', this.mappings.PUNCTUATION.LEFT);
             processStick('right', 'onset', this.mappings.PUNCTUATION.RIGHT);
+        }
+
+        // IMPORTANT: Update state for next frame
+        if (current.sticks) {
+            this.lastFrameSticks = {
+                left: { ...current.sticks.left },
+                right: { ...current.sticks.right }
+            };
         }
     }
 
@@ -337,23 +347,34 @@ export class TypingEngine {
         // If nothing in buffer, return empty
         if (!onset && !vowel && !coda) return '';
 
+        // Determine Order
+        const rimeConfig = this.mappings.RIME || {};
+        const order = rimeConfig.ORDER || rimeConfig.INSERT_ORDER || ['VOWELS', 'CODA'];
+
+        let rimePart = '';
+        if (order[0] === 'CODA') {
+            rimePart = coda + vowel;
+        } else {
+            rimePart = vowel + coda;
+        }
+
+        let fullSyllable = onset + rimePart;
+
+        // --- CASE HANDLING ---
+
         if (mode === 2) { // CAPS LOCK
-            return (onset + vowel + coda).toUpperCase();
+            return fullSyllable.toUpperCase();
         }
 
         if (mode === 1) { // SHIFT (Title Case)
-            if (onset) {
-                return onset.toUpperCase() + vowel + coda;
-            } else if (vowel) {
-                return vowel.toUpperCase() + coda;
-            } else if (coda) {
-                // Rare case: only coda selected? (e.g. onset-less syllable starting with consonant coda? unlikely but possible)
-                return coda.toUpperCase();
+            // Title case the FIRST character of the constructed syllable
+            if (fullSyllable.length > 0) {
+                return fullSyllable.charAt(0).toUpperCase() + fullSyllable.slice(1);
             }
         }
 
         // LOWER
-        return onset + vowel + coda;
+        return fullSyllable;
     }
 
     typeCharacter(char) {

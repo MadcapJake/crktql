@@ -85,6 +85,7 @@ export class Visualizer {
             currentMap = mappings.PUNCTUATION[side.toUpperCase()];
         }
 
+
         if (currentMap) {
             for (const seg of segments) {
                 const char = currentMap[seg.sector];

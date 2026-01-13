@@ -10,18 +10,30 @@ export class SettingsManager extends SubMenu {
             deadzone: 0.5,
             onsetConflict: 'COMMIT',
             visualizerPlacement: 'BOTTOM_CENTER',
-            cursorType: 'BAR'
+            cursorType: 'BAR',
+            writingSystem: 'Latin'
         };
 
         this.options = [
             { key: 'visualizer', label: 'Visualizer', type: 'toggle' },
             { key: 'visualizerPlacement', label: 'Vis. Placement', type: 'select', values: ['BOTTOM_CENTER', 'BOTTOM_OUTER', 'TOP_CENTER', 'TOP_OUTER'] },
+            { key: 'writingSystem', label: 'Writing System', type: 'select', values: ['Latin'] }, // Default, updated via setTypingEngine
             { key: 'debug', label: 'Developer Mode', type: 'toggle' },
             { key: 'cursorType', label: 'Cursor Type', type: 'select', values: ['BAR', 'BLOCK', 'UNDERLINE'] },
             { key: 'deadzone', label: 'Deadzone', type: 'range', min: 0.1, max: 0.9, step: 0.1 },
             { key: 'onsetConflict', label: 'Onset Conflict', type: 'select', values: ['COMMIT', 'IGNORE', 'SWITCH'] },
             { key: 'done', label: 'Done', type: 'action', className: 'done-btn' }
         ];
+    }
+
+    setTypingEngine(engine) {
+        this.typingEngine = engine;
+        // Update writingSystem options
+        const systems = engine.getAvailableMappings();
+        const opt = this.options.find(o => o.key === 'writingSystem');
+        if (opt) {
+            opt.values = systems;
+        }
     }
 
     loadSettings() {

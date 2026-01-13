@@ -75,6 +75,7 @@ document.querySelector('#app').innerHTML = `
 const settingsManager = new SettingsManager(); // Keep this for config
 const gamepadManager = new GamepadManager();
 const typingEngine = new TypingEngine();
+settingsManager.setTypingEngine(typingEngine);
 const editorRenderer = new EditorRenderer('editor-view', typingEngine, settingsManager);
 const gamepadMenu = new GamepadMenu();
 // --- DEBUG OVERLAY ---
@@ -621,6 +622,10 @@ settingsManager.onUpdate = (config) => {
 
   typingEngine.mapper.DEADZONE = config.deadzone;
   typingEngine.onsetConflictMode = config.onsetConflict;
+
+  if (config.writingSystem && config.writingSystem !== typingEngine.currentMappingName) {
+    typingEngine.setMapping(config.writingSystem);
+  }
 
   // Refresh Editor to reflect cursor changes immediately
   if (focusManager.mode === 'EDITOR' || focusManager.mode === 'GUTTER' || settingsManager.isOpen) {

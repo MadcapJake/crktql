@@ -66,6 +66,36 @@ A gamepad-only [Hîsyêô](https://hisyeo.github.io/) text editor designed for e
 - **West (X)**: Cut
 - **South (A)**: Copy
 
+## Custom Mappings
+
+You can define custom input mappings by adding a `.json` file to the `src/mappings/` directory. The filename will be used as the name of the Writing System in the Settings menu.
+
+### Structure
+
+```json
+{
+    "ONSET": {
+        "DEFAULT_VOWEL": "a",
+        "LEFT": { "NORTH": "h", "SOUTH": "f" ... },
+        "RIGHT": { "NORTH": "y", "SOUTH": "b" ... }
+    },
+    "RIME": {
+        "ORDER": ["VOWELS", "CODA"], 
+        "VOWELS": { "NORTH": "i", "SOUTH": "o" ... },
+        "CODA": { "NORTH": "k", "SOUTH": "s" ... }
+    },
+    "PUNCTUATION": {
+        "LEFT": { ... },
+        "RIGHT": { ... }
+    }
+}
+```
+
+- **ONSET.DEFAULT_VOWEL**: The vowel automatically appended when releasing an onset stick without selecting a rime (e.g., 'a' or 'o').
+- **RIME.ORDER**: Defines the syllable construction order.
+    - `["VOWELS", "CODA"]`: Produces `<ONSET><VOWEL><CODA>`.
+    - `["CODA", "VOWELS"]`: Produces `<ONSET><CODA><VOWEL>`.
+
 ## Project Structure
 - `src/main.js`: Application entry point and main loop
 - `src/modes/`: Mode logic (Editor, Overview, etc.)
