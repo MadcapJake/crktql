@@ -1,0 +1,75 @@
+# yôn Cuktelo
+
+![yôn Cuktelo Logo](public/cuktelo.svg)
+
+A gamepad-only [Hîsyêô](https://hisyeo.github.io/) text editor designed for efficient, controller-based writing and text manipulation.
+
+## Overview
+**yôn Cuktelo** reimagines text entry by mapping typing, navigation, and editing commands to a standard gamepad controller. It features a modal interface similar to console text editors but optimized for thumbs, allowing for high-speed input and precise control without a keyboard.
+
+## Features
+- **Gamepad Typing**: Chorded syllable entry system.
+- **Modes**:
+  - **Editor**: Standard text composition.
+  - **Overview**: Grid-based navigation of document parts.
+  - **Visual Select**: Precise text selection and manipulation.
+  - **Gutter**: Bottom bar for file management and settings.
+- **Persistence**: Auto-saves content and settings to LocalStorage.
+- **Undo/Redo**: Robust history system.
+- **Citations**: Atomic citation tags `{{cite:x,y}}` with navigation support.
+
+## Installation
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/your-repo/crktqla.git
+   cd crktqla
+   ```
+
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+
+3. Start the development server:
+   ```bash
+   npm run dev
+   ```
+
+4. Open `http://localhost:5173` (or the port shown) in your browser.
+   *Ensure a gamepad is connected before pressing any buttons to initialize input.*
+
+## Controls (Xbox Layout)
+
+### General
+- **Modifier (North / Y)**: Hold to access secondary layers.
+
+### Editor Mode
+- **Left Stick**: Cursor Movement (Standard).
+- **Modifier + Left/Right**: Word Navigation.
+- **South (A)**: Enter / Confirm.
+- **West (X)**: Delete Backwards.
+- **Modifier + West (X)**: Delete Word Backwards.
+- **Modifier + L3/R3**: Paste from Clipboard.
+- **Modifier + RB**: Enter Visual Select Mode.
+- **Modifier + LT**: Undo.
+- **Modifier + RT**: Redo.
+
+### Overview Mode
+- **D-Pad**: Grid Navigation.
+- **South (A)**: Enter Selected Part.
+- **Modifier + B**: Follow Link (if valid).
+
+### Visual Select Mode
+- **D-Pad**: Expand/Shrink Selection.
+- **West (X)**: Cut.
+- **South (A)**: Copy.
+
+## Project Structure
+- `src/main.js`: Application entry point and main loop.
+- `src/modes/`: Mode logic (Editor, Overview, etc.).
+- `src/ui/`: UI Renderers.
+- `src/input/`: Input routing and mapping.
+
+## License
+[MIT](LICENSE)
