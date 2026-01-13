@@ -42,4 +42,15 @@ export class FocusManager {
             this.setMode('GUTTER');
         }
     }
+
+    setModifierState(isHeld) {
+        const modeIcon = document.getElementById('mode-indicator');
+        if (modeIcon) {
+            if (isHeld) {
+                modeIcon.innerHTML = '<i class="fa-solid fa-pause"></i>';
+            } else {
+                modeIcon.innerHTML = '<i class="fa-solid fa-border-none"></i>';
+            }
+        }
+    }
 }

@@ -40,7 +40,7 @@ describe('Clipboard Integration', () => {
             getFormattedSyllable: vi.fn().mockReturnValue(''),
             mappings: {}
         };
-        const focusManager = { setMode: vi.fn() };
+        const focusManager = { setMode: vi.fn(), setModifierState: vi.fn() };
         const gamepadManager = { lastButtons: {}, getActiveGamepad: vi.fn().mockReturnValue({}) };
         const showNotification = vi.fn();
 

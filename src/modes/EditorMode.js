@@ -110,7 +110,8 @@ export class EditorMode extends TextEntryMode {
         let handledNav = false;
 
         // Safe access helper
-        const justPressed = (btn) => dpad[btn] && !this.lastDpad[btn];
+        const localLastDpad = { ...this.lastDpad };
+        const justPressed = (btn) => dpad[btn] && !localLastDpad[btn];
 
         // Modifier State (Y / North)
         this.isModifierHeld = frameInput.buttons.north;
@@ -123,14 +124,7 @@ export class EditorMode extends TextEntryMode {
             if (part) this.renderIfChanged(this.renderer, part.content, part.cursor, part, this.selectionAnchor, this.isModifierHeld, this.typingEngine.getFormattedSyllable());
 
             // Toggle Status Icon
-            const modeIcon = document.getElementById('mode-indicator');
-            if (modeIcon) {
-                if (this.isModifierHeld) {
-                    modeIcon.innerHTML = '<i class="fa-solid fa-pause"></i>';
-                } else {
-                    modeIcon.innerHTML = '<i class="fa-solid fa-border-none"></i>';
-                }
-            }
+            this.focusManager.setModifierState(this.isModifierHeld);
         }
 
         // Undo: Y (North) + Left Trigger

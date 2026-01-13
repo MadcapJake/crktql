@@ -57,7 +57,6 @@ export class TextEntryMode {
         }
 
         this.lastDpad = { ...dpad };
-        this.lastDpad = { ...dpad };
         return cursor;
     }
 

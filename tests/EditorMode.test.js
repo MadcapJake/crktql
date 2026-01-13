@@ -31,7 +31,8 @@ describe('EditorMode', () => {
                 push: vi.fn()
             },
             focusManager: {
-                setMode: vi.fn()
+                setMode: vi.fn(),
+                setModifierState: vi.fn()
             },
             gridOverview: {
                 setCursor: vi.fn(),
@@ -135,6 +136,66 @@ describe('EditorMode', () => {
 
             editorMode.handleInput(frameInput, {});
             expect(mocks.onPaste).toHaveBeenCalled();
+        });
+
+        it('handles "Real" Paste from Clipboard API when onPaste is missing', async () => {
+            // 1. Remove onPaste mock to trigger internal logic
+            editorMode.onPaste = null;
+
+            // 2. Mock Clipboard
+            const clipboardText = "PastedText";
+            Object.defineProperty(navigator, 'clipboard', {
+                value: {
+                    readText: vi.fn().mockResolvedValue(clipboardText)
+                },
+                writable: true
+            });
+
+            // 3. Setup Initial State
+            mocks.bookManager.getCurrentPart.mockReturnValue({ content: "StartEnd", cursor: 5 });
+            // Content: "StartEnd", Cursor: 5 (Between t and E) -> "Start|End"
+
+            // 4. Trigger Paste
+            await editorMode.paste();
+
+            // 5. Assertions
+            // Should verify content updated
+            expect(mocks.bookManager.setCurrentPartContent).toHaveBeenCalledWith("StartPastedTextEnd");
+            // Should verify cursor move
+            expect(mocks.bookManager.setPartCursor).toHaveBeenCalledWith(5 + clipboardText.length);
+            // Should verify history push
+            expect(mocks.historyManager.push).toHaveBeenCalledWith(expect.objectContaining({
+                type: 'ADD_TEXT',
+                data: { text: clipboardText, index: 5 }
+            }));
+        });
+    });
+
+    describe('Atomic Citation Navigation', () => {
+        it('skips over Atomic Citations ({{cite:x,y}}) during navigation', () => {
+            // Content: "A{{cite:1,1}}B"
+            // Tag: "{{cite:1,1}}"
+            // Length: 12 chars ("{{" + "cite:1,1" + "}}")
+            // Indices:
+            // 0: A
+            // 1: { (Start of tag)
+            // ...
+            // 13: B (After tag? 1 + 12 = 13. Index 13 is 'B')
+
+            const content = "A{{cite:1,1}}B";
+            mocks.bookManager.getCurrentPart.mockReturnValue({ content: content, cursor: 1 }); // Before '{{'
+
+            // 1. Navigate Right (Into the tag)
+            editorMode.handleInput({ buttons: { dpad: { right: true } } }, {});
+
+            expect(mocks.bookManager.setPartCursor).toHaveBeenLastCalledWith(13);
+
+            // 2. Navigate Left (From End)
+            mocks.bookManager.getCurrentPart.mockReturnValue({ content: content, cursor: 13 });
+
+            editorMode.handleInput({ buttons: { dpad: { left: true } } }, {});
+
+            expect(mocks.bookManager.setPartCursor).toHaveBeenLastCalledWith(1); // Back to start of tag
         });
     });
 });
