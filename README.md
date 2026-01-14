@@ -74,12 +74,15 @@ You can define custom input mappings by adding a `.json` file to the `src/mappin
 
 ```json
 {
+    "STARTING_BOOK_NAME": "tômôs",
+    "STARTING_MAIN_NAME": "niwos",
+    "STAGING_BRACKETS": "⟦⟧",
     "ONSET": {
         "DEFAULT_VOWEL": "a",
         "LEFT": { "NORTH": "h", "SOUTH": "f" ... },
         "RIGHT": { "NORTH": "y", "SOUTH": "b" ... }
     },
-    "RIME": {
+   "RIME": {
         "ORDER": ["VOWELS", "CODA"], 
         "VOWELS": { "NORTH": "i", "SOUTH": "o" ... },
         "CODA": { "NORTH": "k", "SOUTH": "s" ... }
@@ -91,6 +94,9 @@ You can define custom input mappings by adding a `.json` file to the `src/mappin
 }
 ```
 
+- **STARTING_BOOK_NAME**: The default name used for the book when creating a new one with this writing system active.
+- **STARTING_MAIN_NAME**: The default name for the first part (0,0) created in a new book.
+- **STAGING_BRACKETS**: A two-character string (e.g., "⟦⟧") used to wrap the syllable currently being constructed (staged) in the editor view.
 - **ONSET.DEFAULT_VOWEL**: The vowel automatically appended when releasing an onset stick without selecting a rime (e.g., 'a' or 'o').
 - **RIME.ORDER**: Defines the syllable construction order.
     - `["VOWELS", "CODA"]`: Produces `<ONSET><VOWEL><CODA>`.
