@@ -10,6 +10,17 @@ export class BookManager {
             writingSystem: 'Latin',
             font: 'Courier New'
         };
+        // Runtime state for Sticky Column navigation (Goal Column)
+        // Clears on reload (RAM only), satisfying requirement.
+        this.desiredColumns = new Map();
+    }
+
+    setDesiredColumn(col) {
+        this.desiredColumns.set(this.currentPartKey, col);
+    }
+
+    getDesiredColumn() {
+        return this.desiredColumns.get(this.currentPartKey);
     }
 
     startNewBook(initialPartName = "Main", writingSystem = "Latin", font = "Courier New") {

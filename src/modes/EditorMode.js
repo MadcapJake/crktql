@@ -63,6 +63,7 @@ export class EditorMode extends TextEntryMode {
             // Sync render and engine
             part.content = newContent;
             part.cursor = cursor + 1;
+            this.updateGoalColumn(newContent, part.cursor);
             this.renderIfChanged(this.renderer, part.content, part.cursor, part, this.selectionAnchor);
             this.typingEngine.reset(newContent);
             this.lastEngineTextLength = newContent.length;
@@ -89,6 +90,7 @@ export class EditorMode extends TextEntryMode {
                 // Sync render and engine
                 part.content = newContent;
                 part.cursor = target;
+                this.updateGoalColumn(newContent, part.cursor);
                 this.renderIfChanged(this.renderer, part.content, part.cursor, part, this.selectionAnchor);
                 this.typingEngine.reset(newContent);
                 this.lastEngineTextLength = newContent.length;
@@ -156,6 +158,7 @@ export class EditorMode extends TextEntryMode {
                     if (p) {
                         this.typingEngine.reset(p.content);
                         this.lastEngineTextLength = p.content.length;
+                        this.updateGoalColumn(p.content, p.cursor);
                         this.renderer.render(p, this.selectionAnchor);
                     }
                 } else {
@@ -191,6 +194,7 @@ export class EditorMode extends TextEntryMode {
                     if (p) {
                         this.typingEngine.reset(p.content);
                         this.lastEngineTextLength = p.content.length;
+                        this.updateGoalColumn(p.content, p.cursor);
                         this.renderer.render(p, this.selectionAnchor);
                     }
                 } else {
@@ -208,18 +212,36 @@ export class EditorMode extends TextEntryMode {
         // Actually I don't use navUp/Down in the override block below.
 
         // Base Navigation
-        // We pass 'false' for singleLine because EditorMode is multi-line.
-        cursor = this.navigate(dpad, cursor, content, false);
+        // Custom Sticky Column Logic for Up/Down
+        if (justPressed('up') || justPressed('down')) {
+            cursor = this.navigateVertical(dpad, cursor, content);
+        } else {
+            // Left/Right handled by super
+            // Mask Up/Down so super doesn't double-process if we accidentally let it
+            const horizontalDpad = { ...dpad, up: false, down: false };
+            cursor = this.navigate(horizontalDpad, cursor, content, false);
+        }
+
         handledNav = cursor !== part.cursor;
+
+        if (handledNav) {
+            // If moved (Left/Right), update Goal Column
+            // Vertical moves (handled above) do NOT update Goal Column
+            if (justPressed('left') || justPressed('right')) {
+                this.updateGoalColumn(content, cursor);
+            }
+        }
 
         if (this.isModifierHeld) {
             // Override with Word Nav
             if (navLeft) {
                 cursor = this.navigateWordLeft(part.cursor, content);
                 handledNav = true;
+                this.updateGoalColumn(content, cursor);
             } else if (navRight) {
                 cursor = this.navigateWordRight(part.cursor, content);
                 handledNav = true;
+                this.updateGoalColumn(content, cursor);
             }
             // Page Up/Down could go here too if we want overrides
         }
@@ -421,6 +443,8 @@ export class EditorMode extends TextEntryMode {
                     part.content = newContent;
                     part.cursor = newCursor;
 
+                    this.updateGoalColumn(newContent, newCursor);
+
                     this.typingEngine.reset(newContent);
                     this.lastEngineTextLength = newContent.length;
                 }
@@ -453,6 +477,8 @@ export class EditorMode extends TextEntryMode {
 
                     part.content = result.newContent;
                     part.cursor = result.newCursor;
+
+                    this.updateGoalColumn(result.newContent, result.newCursor);
 
                     // If atomic or explicit text change, sync engine
                     this.typingEngine.reset(result.newContent);
@@ -512,6 +538,8 @@ export class EditorMode extends TextEntryMode {
             part.content = newContent;
             part.cursor = cursor + text.length;
 
+            this.updateGoalColumn(newContent, part.cursor);
+
             this.renderIfChanged(this.renderer, part.content, part.cursor, part, this.selectionAnchor, this.isModifierHeld, this.typingEngine.getFormattedSyllable());
             this.typingEngine.reset(newContent);
             this.lastEngineTextLength = newContent.length;
@@ -521,5 +549,65 @@ export class EditorMode extends TextEntryMode {
             console.error("Paste failed", err);
             this.showNotification("Paste Failed");
         }
+    }
+
+    // --- Sticky Column Helpers ---
+
+    updateGoalColumn(content, cursor) {
+        const { col } = this.getLineInfo(content, cursor);
+        this.bookManager.setDesiredColumn(col);
+    }
+
+    getLineInfo(content, cursor) {
+        const lastNewline = content.lastIndexOf('\n', cursor - 1);
+        const currentLineStart = lastNewline === -1 ? 0 : lastNewline + 1;
+        const nextNewline = content.indexOf('\n', cursor);
+        const currentLineEnd = nextNewline === -1 ? content.length : nextNewline;
+
+        return {
+            start: currentLineStart,
+            end: currentLineEnd,
+            col: cursor - currentLineStart,
+            length: currentLineEnd - currentLineStart
+        };
+    }
+
+    navigateVertical(dpad, cursor, content) {
+        let desiredCol = this.bookManager.getDesiredColumn();
+
+        // If no desired column set (first move), set it to current
+        if (desiredCol === undefined || desiredCol === null) {
+            const { col } = this.getLineInfo(content, cursor);
+            desiredCol = col;
+            this.bookManager.setDesiredColumn(desiredCol);
+        }
+
+        const info = this.getLineInfo(content, cursor);
+        let targetLineStart = -1;
+        let targetLineEnd = -1;
+
+        if (dpad.up && !this.lastDpad.up) {
+            // Move Up
+            if (info.start === 0) return cursor; // Top
+            const prevNewline = content.lastIndexOf('\n', info.start - 2);
+            targetLineStart = prevNewline === -1 ? 0 : prevNewline + 1;
+            targetLineEnd = info.start - 1; // The newline character
+        } else if (dpad.down && !this.lastDpad.down) {
+            // Move Down
+            if (info.end === content.length) return cursor; // Bottom
+            targetLineStart = info.end + 1;
+            const nextNextNewline = content.indexOf('\n', targetLineStart);
+            targetLineEnd = nextNextNewline === -1 ? content.length : nextNextNewline;
+        } else {
+            return cursor;
+        }
+
+        if (targetLineStart !== -1) {
+            const lineLen = targetLineEnd - targetLineStart;
+            // Clamp desired column to line length
+            const actualCol = Math.min(desiredCol, lineLen);
+            return targetLineStart + actualCol;
+        }
+        return cursor;
     }
 }
