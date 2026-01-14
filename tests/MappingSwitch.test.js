@@ -13,7 +13,7 @@ test('TypingEngine switches mappings correctly', () => {
     engine.setMapping('Hisyakui');
 
     expect(engine.currentMappingName).toBe('Hisyakui');
-    expect(engine.mappings.ONSET.DEFAULT_VOWEL).toBe('a');
+    expect(engine.mappings.ONSET.DEFAULT_VOWEL).toBe('');
 
     // Check RIME VOWELS
     // Latin 'NORTH': 'i'

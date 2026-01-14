@@ -1,6 +1,6 @@
 {
     "ONSET": {
-        "DEFAULT_VOWEL": "a",
+        "DEFAULT_VOWEL": "",
         "LEFT": {
             "NORTH": "h",
             "NORTH_EAST": "k",

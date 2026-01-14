@@ -90,7 +90,7 @@ export class Visualizer {
             for (const seg of segments) {
                 const char = currentMap[seg.sector];
                 if (char) {
-                    seg.label.textContent = char.toUpperCase();
+                    seg.label.textContent = char;
                 }
             }
         }

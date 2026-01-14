@@ -1,3 +1,35 @@
+/* Custom Fonts */
+@font-face {
+  font-family: 'Charis SIL';
+  src: url('/fonts/Charis.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Doulos SIL';
+  src: url('/fonts/DoulosSIL.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Gentium Plus';
+  /* Standard Gentium */
+  src: url('/fonts/Gentium.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Gentium Book Plus';
+  src: url('/fonts/GentiumBook.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Hisyoto Sans';
+  src: url('/fonts/HisyotoSans.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Hisyakui';
+  src: url('/fonts/HisyakuiSans.woff2') format('woff2');
+}
+
 :root {
   --font-family: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
   --line-height: 1.5;
@@ -23,6 +55,9 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+
+  /* App Font Setting */
+  --app-font: 'Courier New', monospace;
 }
 
 * {
@@ -212,7 +247,7 @@ body {
   outline: none;
   white-space: pre-wrap;
   overflow-y: auto;
-  font-family: 'Courier New', Courier, monospace;
+  font-family: var(--app-font);
   position: relative;
   box-sizing: border-box;
 }
@@ -305,7 +340,7 @@ body {
   border: none;
   color: var(--color-text);
   font-size: 2rem;
-  font-family: 'Courier New', monospace;
+  font-family: var(--app-font);
   resize: none;
   outline: none;
   line-height: 1.5;
@@ -418,7 +453,7 @@ body {
   color: #666;
   font-size: 10px;
   padding: 8px;
-  font-family: monospace;
+  font-family: var(--app-font);
   white-space: pre-wrap;
   border: 1px solid #333;
 }
@@ -428,6 +463,7 @@ body {
   font-weight: bold;
   color: #eee;
   text-align: center;
+  font-family: var(--app-font);
 }
 
 .grid-empty-slot {
@@ -544,6 +580,7 @@ body {
 }
 
 .segment-label {
+  font-family: var(--app-font);
   position: absolute;
   font-size: 1.2rem;
   font-weight: bold;

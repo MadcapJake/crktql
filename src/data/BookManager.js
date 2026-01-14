@@ -2,7 +2,7 @@
 export class BookManager {
     constructor() {
         this.book = {
-            "0,0": { name: "Main", content: "", cursor: 0 }
+            "0,0": { name: "bindû mutyu", content: "", cursor: 0 }
         };
         this.currentPartKey = "0,0";
         this.filename = "untitled.htz";

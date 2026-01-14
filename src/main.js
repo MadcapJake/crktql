@@ -628,6 +628,10 @@ settingsManager.onUpdate = (config) => {
   }
 
   // Refresh Editor to reflect cursor changes immediately
+  if (config.font) {
+    document.documentElement.style.setProperty('--app-font', config.font);
+  }
+
   if (focusManager.mode === 'EDITOR' || focusManager.mode === 'GUTTER' || settingsManager.isOpen) {
     const part = bookManager.getCurrentPart();
     if (part) editorRenderer.render(part);
