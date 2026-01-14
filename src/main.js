@@ -344,7 +344,7 @@ function updateStatusText(mode) {
     if (part) {
       html = `
             <span class="notification-persistent" style="font-family: var(--app-font);">
-               <strong style="color:var(--color-accent)">${bookManager.bookName}</strong> &mdash; ${part.name} <span style="color: #888;">(${part.x}, ${part.y})</span>
+               <strong style="color:var(--color-accent)">${bookManager.bookName}</strong> &mdash; ${part.name} <span style="color: #888;">(${part.x} . ${part.y})</span>
             </span>
           `;
     }
