@@ -10,6 +10,7 @@ export class RenamingMode extends TextEntryMode {
         this.gridOverview = deps.gridOverview;
         this.overviewMode = deps.overviewMode;
         this.editorRenderer = deps.editorRenderer;
+        this.visualizer = deps.visualizer;
         this.lastEngineTextLength = 0;
         this.wasActive = false;
     }
@@ -81,6 +82,11 @@ export class RenamingMode extends TextEntryMode {
                 this.lastEngineTextLength = result.newLength;
                 // Just render current (nav only)
                 this.renderIfChanged(this.editorRenderer, state.text, cur);
+            }
+
+            // 6. Update Visualizer
+            if (this.visualizer) {
+                this.visualizer.update(frameInput, state.mode, this.typingEngine.mappings, this.typingEngine.state.syllable);
             }
         } else {
             this.renderIfChanged(this.editorRenderer, txt, cur);

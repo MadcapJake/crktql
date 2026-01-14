@@ -220,7 +220,8 @@ const renamingMode = new RenamingMode({
   focusManager,
   gridOverview,
   overviewMode,
-  editorRenderer
+  editorRenderer,
+  visualizer
 });
 
 const inputRouter = new InputRouter({
