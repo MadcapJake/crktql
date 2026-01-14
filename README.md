@@ -104,9 +104,22 @@ You can define custom input mappings by adding a `.json` file to the `src/mappin
 
 ## Project Structure
 - `src/main.js`: Application entry point and main loop
+- `src/engine/`: Typing Engine logic
 - `src/modes/`: Mode logic (Editor, Overview, etc.)
 - `src/ui/`: UI Renderers
 - `src/input/`: Input routing and mapping
+- `src/mappings/`: Input mappings for different writing systems
+- `src/data/`: Book data and history
+
+## TODO
+
+- [ ] Move to IndexedDB from LocalStorage for async autosave and session restore
+- [ ] Spellcheck Mode (shoulder buttons nav thru errors) (customizable w/ hunspell files)
+- [ ] Home/End/Top/Bottom using another chording key
+- [ ] In Overview Mode, Home navigates to main part (0,0), but End/Top/Bottom do nothing
+- [ ] In Editor Mode, part navigation using another chording key
+- [ ] Add a joystick layer for symbols/numbers
+- [ ] Allow parts to be external links to websites that load in an iframe
 
 ## License
 [MIT](LICENSE)
