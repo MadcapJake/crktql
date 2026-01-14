@@ -24,7 +24,7 @@ export class EditorRenderer {
                 .replace(/ /g, '&nbsp;');
 
             // Render Citations: {{cite:x,y}} -> Pill
-            return escaped.replace(/\{\{cite:(-?\d+),(-?\d+)\}\}/g, '<span class="citation-pill">⌖ $1, $2</span>');
+            return escaped.replace(/\{\{cite:(-?\d+),(-?\d+)\}\}/g, '<span class="citation-pill">$1 . $2</span>');
         };
 
         const processText = safeEscape;
@@ -82,7 +82,7 @@ export class EditorRenderer {
                         const rest = after.slice(match[0].length);
 
                         // Render the pill WITH the cursor class
-                        html += `<span class="citation-pill cursor ${cursorSubClass} cursor-atomic">⌖ ${x}, ${y}</span>`;
+                        html += `<span class="citation-pill cursor ${cursorSubClass} cursor-atomic">${x} . ${y}</span>`;
                         html += processText(rest);
                     } else {
                         // Standard Char
