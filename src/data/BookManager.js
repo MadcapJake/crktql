@@ -1,20 +1,71 @@
-
 export class BookManager {
     constructor() {
         this.book = {
-            "0,0": { name: "bindû mutyu", content: "", cursor: 0 }
+            "0,0": { name: "Main", content: "", cursor: 0 }
         };
         this.currentPartKey = "0,0";
         this.filename = "untitled.htz";
+        this.bookName = "Untitled Book";
+        this.metadata = {
+            writingSystem: 'Latin',
+            font: 'Courier New'
+        };
+    }
+
+    startNewBook(initialPartName = "Main", writingSystem = "Latin", font = "Courier New") {
+        this.book = {
+            "0,0": { name: initialPartName, content: "", cursor: 0 }
+        };
+        this.currentPartKey = "0,0";
+        this.bookName = "Untitled Book";
+        this.filename = "untitled_book.htz";
+        this.metadata = {
+            writingSystem: writingSystem,
+            font: font
+        };
+        this.saveToStorage();
+    }
+
+    setBookName(name) {
+        this.bookName = name.trim();
+        // Filename: Replace spaces with underscores
+        this.filename = this.bookName.replace(/\s+/g, '_') + '.htz';
+        this.saveToStorage();
     }
 
     loadBook(jsonContent, filename) {
         try {
             const data = typeof jsonContent === 'string' ? JSON.parse(jsonContent) : jsonContent;
-            this.book = data;
-            this.filename = filename || "untitled.htz";
 
-            // Find a valid part to default to if current is missing
+            // Legacy Support: If data is just the book object (old format), wrap it?
+            // Actually, previously data IS the book object map?
+            // Lines 13-14: `this.book = data;`.
+            // New format: data might be { book: {...}, metadata: {...}, bookName: ... } or just {...parts...}
+
+            if (data.parts && data.metadata) {
+                // New Format
+                this.book = data.parts;
+                this.metadata = data.metadata || { writingSystem: 'Latin', font: 'Courier New' };
+                this.bookName = data.bookName || "Untitled Book";
+            } else {
+                // Old Format (Just parts map)
+                this.book = data;
+                this.metadata = { writingSystem: 'Latin', font: 'Courier New' };
+
+                // Book Name from Filename
+                if (filename) {
+                    // Remove extension
+                    const base = filename.replace(/\.htz$/i, '');
+                    // Underscores to spaces
+                    this.bookName = base.replace(/_/g, ' ');
+                } else {
+                    this.bookName = "Untitled Book";
+                }
+            }
+
+            this.filename = filename || (this.bookName.replace(/\s+/g, '_') + '.htz');
+
+            // Part Validation
             if (!this.book[this.currentPartKey]) {
                 const keys = Object.keys(this.book);
                 if (keys.length > 0) this.currentPartKey = keys[0];
@@ -30,7 +81,13 @@ export class BookManager {
     }
 
     exportBook() {
-        return JSON.stringify(this.book, null, 2);
+        // Export Full Object
+        const data = {
+            parts: this.book,
+            metadata: this.metadata,
+            bookName: this.bookName
+        };
+        return JSON.stringify(data, null, 2);
     }
 
     getCurrentPart() {
@@ -63,6 +120,10 @@ export class BookManager {
         const key = `${x},${y}`;
         if (this.book[key]) return false; // Already exists
 
+        // Initial Name? Just Unnamed or based on Mapping?
+        // User request: "When creating a new book, use STARTING_MAIN_NAME... for the first part"
+        // This method is for NEW PARTS in EXISTING book.
+        // So just "Unnamed" or generic is fine.
         this.book[key] = {
             name: "Unnamed",
             content: "",
@@ -120,7 +181,9 @@ export class BookManager {
         this.saveTimeout = setTimeout(() => {
             try {
                 const data = {
-                    book: this.book,
+                    parts: this.book,
+                    metadata: this.metadata,
+                    bookName: this.bookName,
                     currentPartKey: this.currentPartKey,
                     filename: this.filename
                 };
@@ -137,10 +200,23 @@ export class BookManager {
             const saved = localStorage.getItem('crktqla_book');
             if (saved) {
                 const data = JSON.parse(saved);
-                if (data.book) this.book = data.book;
+
+                // Handle Migration from Old Storage (which had .book = parts)
+                if (data.parts) {
+                    this.book = data.parts;
+                    this.metadata = data.metadata || { writingSystem: 'Latin', font: 'Courier New' };
+                    this.bookName = data.bookName || "Untitled Book";
+                } else if (data.book) {
+                    // Old format: data.book WAS the parts map
+                    this.book = data.book;
+                    this.metadata = { writingSystem: 'Latin', font: 'Courier New' };
+                    this.bookName = "Untitled Book";
+                }
+
                 if (data.currentPartKey) this.currentPartKey = data.currentPartKey;
                 if (data.filename) this.filename = data.filename;
-                console.log('[BookManager] Loaded book from storage');
+
+                console.log('[BookManager] Loaded book from storage', { name: this.bookName });
                 return true;
             }
         } catch (e) {

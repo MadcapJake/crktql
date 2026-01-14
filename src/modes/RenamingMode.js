@@ -89,17 +89,30 @@ export class RenamingMode extends TextEntryMode {
 
     save(frameInput) {
         const newName = this.typingEngine.getBufferText();
-        const { x, y, oldName } = this.focusManager.renameTarget;
+        const target = this.focusManager.renameTarget;
 
-        this.bookManager.renamePart(x, y, newName);
-        this.bookManager.saveToStorage();
+        if (target && target.type === 'BOOK') {
+            this.bookManager.setBookName(newName);
+            // No history for Book Name yet? Or maybe 'RENAME_BOOK'?
+            if (this.historyManager) {
+                this.historyManager.push({
+                    type: 'RENAME_BOOK',
+                    data: { oldName: target.oldName, newName }
+                });
+            }
+        } else {
+            // Default: Part Rename
+            const { x, y, oldName } = target;
+            this.bookManager.renamePart(x, y, newName);
+            this.bookManager.saveToStorage();
 
-        if (this.historyManager) {
-            this.historyManager.push({
-                type: 'RENAME_PART',
-                partKey: `${x},${y}`,
-                data: { x, y, oldName, newName }
-            });
+            if (this.historyManager) {
+                this.historyManager.push({
+                    type: 'RENAME_PART',
+                    partKey: `${x},${y}`,
+                    data: { x, y, oldName, newName }
+                });
+            }
         }
 
         this.exit(frameInput);
@@ -111,11 +124,24 @@ export class RenamingMode extends TextEntryMode {
 
     exit(frameInput) {
         this.wasActive = false;
-        if (this.overviewMode && frameInput) {
-            this.overviewMode.syncInputState(frameInput);
-        }
 
-        this.focusManager.setMode('OVERVIEW');
-        if (this.gridOverview) this.gridOverview.render();
+        const target = this.focusManager.renameTarget;
+
+        if (target && target.type === 'BOOK') {
+            // Return to Editor
+            if (this.editorRenderer) {
+                // Ensure editor has focus visuals back? 
+                // EditorRenderer handles rendering part content.
+                // We just switch mode.
+            }
+            this.focusManager.setMode('EDITOR');
+        } else {
+            // Return to Overview
+            if (this.overviewMode && frameInput) {
+                this.overviewMode.syncInputState(frameInput);
+            }
+            this.focusManager.setMode('OVERVIEW');
+            if (this.gridOverview) this.gridOverview.render();
+        }
     }
 }

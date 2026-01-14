@@ -9,6 +9,13 @@ export class GamepadMenu extends SubMenu {
 
         // Initial placeholder options
         this.options = [];
+        this.deadzone = 0.5; // Default, overriden by setDeadzone
+        this.onDeadzoneChange = null;
+    }
+
+    setDeadzone(val) {
+        this.deadzone = val;
+        if (this.isOpen) this.render();
     }
 
     setGamepadInfo(info) {
@@ -27,7 +34,8 @@ export class GamepadMenu extends SubMenu {
 
         this.options = [
             { key: 'info', label: infoText, type: 'info', icon: '<i class="fa-solid fa-gamepad"></i>' },
-            { key: 'calibrate', label: 'Calibrate Sticks', icon: '<i class="fa-solid fa-crosshairs"></i>' },
+            { key: 'deadzone', label: 'Joystick Deadzone', type: 'range', min: 0.1, max: 0.9, step: 0.1 },
+            { key: 'calibrate', label: 'Map Controller', icon: '<i class="fa-solid fa-screwdriver-wrench"></i>' },
             { key: 'done', label: 'Done', className: 'done-btn', icon: '<i class="fa-solid fa-check"></i>' }
         ];
     }
@@ -54,12 +62,42 @@ export class GamepadMenu extends SubMenu {
         }
     }
 
+    onLeft(option) {
+        if (option.type === 'range') this.adjustRange(option, -1);
+    }
+
+    onRight(option) {
+        if (option.type === 'range') this.adjustRange(option, 1);
+    }
+
+    adjustRange(option, dir) {
+        let val = this.deadzone + (option.step * dir);
+        if (val > option.max) val = option.max;
+        if (val < option.min) val = option.min;
+        this.deadzone = parseFloat(val.toFixed(1));
+        this.render();
+        if (this.onDeadzoneChange) this.onDeadzoneChange(this.deadzone);
+    }
+
     renderItemContent(opt) {
         if (opt.key === 'info') {
             const label = this.copiedFeedback ? "Copied to Clipboard!" : opt.label;
             const style = this.copiedFeedback ? "color: var(--color-accent);" : "";
             return `<span style="flex:1; ${style}">${opt.icon} ${label}</span>`;
         }
+        if (opt.type === 'range') {
+            const val = this.deadzone;
+            const pct = ((val - opt.min) / (opt.max - opt.min)) * 100;
+            return `
+                <span class="settings-label">${opt.label}</span>
+                <span style="flex:1;"></span>
+                <span class="settings-value">${val}</span>
+                <div style="display:inline-block; width:50px; height:4px; background:#333; margin-left:10px; vertical-align:middle; position:relative;">
+                    <div style="position:absolute; left:0; top:0; height:100%; background:var(--color-accent); width:${pct}%"></div>
+                </div>
+            `;
+        }
         return super.renderItemContent(opt);
     }
 }
+

@@ -75,25 +75,16 @@ document.querySelector('#app').innerHTML = `
 const settingsManager = new SettingsManager(); // Keep this for config
 const gamepadManager = new GamepadManager();
 const typingEngine = new TypingEngine();
-settingsManager.setTypingEngine(typingEngine);
+// settingsManager.setTypingEngine(typingEngine); // Removed (Moved to BookMenu)
 const editorRenderer = new EditorRenderer('editor-view', typingEngine, settingsManager);
 const gamepadMenu = new GamepadMenu();
 // --- DEBUG OVERLAY ---
 const debugOverlay = new InputDebugOverlay(gamepadManager, typingEngine.mapper);
 
-
 gamepadMenu.onCalibrate = () => {
   const modal = document.getElementById('calibration-modal');
   if (modal) {
-    // modal.style.display = 'flex'; // Manager handles this now? Let's check. Yes `start()` does.
-    // Actually `start()` sets display flex.
-
-    // We need to set mode to CALIBRATION for the bottom bar status text?
-    // User requested specific bottom bar text.
-    // Let's implement that via FocusManager or direct update?
-    // Best to set focusManager mode to 'CALIBRATION' and handle updateStatusText there.
     focusManager.setMode('CALIBRATION');
-
     calibrationManager.start();
   }
 };
@@ -110,7 +101,7 @@ const updateGamepadUI = (gp) => {
   if (gpName.length > 20) {
     gpName = gpName.slice(0, 20) + '...';
   }
-  showNotification(`🎮️ ${gpName}`, 2000); // Shorter msg, indicating switch
+  showNotification(`🎮️ ${gpName}`, 2000);
   gamepadMenu.setGamepadInfo({ id: gp.id, index: gp.index });
 };
 
@@ -119,16 +110,10 @@ gamepadManager.on('active-change', (gp) => {
 });
 
 window.addEventListener("gamepadconnected", (e) => {
-  // Always update UI on new connection to ensure immediate feedback
   updateGamepadUI(e.gamepad);
-  // showNotification("Game controller connected!", 2000);
 });
 
 window.addEventListener("gamepaddisconnected", (e) => {
-  // Only show warning if the *Active* one disconnected.
-  // We can't easily know if 'e.gamepad' was the active one here without checking state.
-  // logic: if no controllers left, then warn.
-
   if (Object.keys(gamepadManager.controllers).length === 0) {
     const btn = document.getElementById('gamepad-btn');
     if (btn) {
@@ -158,13 +143,14 @@ let currentNotificationTimeout = null;
 
 const bookManager = new BookManager();
 const historyManager = new HistoryManager(bookManager);
-
 const focusManager = new FocusManager();
+
 import { HelpManager } from './ui/HelpManager.js';
 const helpManager = new HelpManager(focusManager);
 import { BookMenu } from './ui/BookMenu.js';
 const bookMenu = new BookMenu();
-
+// Initialize BookMenu Dependencies
+bookMenu.setDependencies(bookManager, typingEngine);
 
 
 const gutter = new Gutter('bottom-bar');
@@ -357,8 +343,8 @@ function updateStatusText(mode) {
     const part = bookManager.getCurrentPart();
     if (part) {
       html = `
-            <span class="notification-persistent" style="font-family: monospace;">
-               ${part.name} <span style="color: #888;">(${part.x}, ${part.y})</span>
+            <span class="notification-persistent" style="font-family: var(--app-font);">
+               <strong style="color:var(--color-accent)">${bookManager.bookName}</strong> &mdash; ${part.name} <span style="color: #888;">(${part.x}, ${part.y})</span>
             </span>
           `;
     }
@@ -441,7 +427,22 @@ window.addEventListener('request-help-toggle', (e) => {
 
 // Book Menu Actions
 bookMenu.onAction = (action) => {
-  if (action === 'new') {
+  if (action === 'rename_book') {
+    focusManager.renameTarget = { type: 'BOOK', oldName: bookManager.bookName };
+    typingEngine.reset(bookManager.bookName);
+    focusManager.setMode('RENAMING');
+  } else if (action === 'update_metadata') {
+    const meta = bookManager.metadata;
+    if (meta.writingSystem) {
+      typingEngine.setMapping(meta.writingSystem);
+    }
+    if (meta.font) {
+      document.documentElement.style.setProperty('--app-font', meta.font);
+    }
+    // Re-render
+    const part = bookManager.getCurrentPart();
+    if (part) editorRenderer.render(part);
+  } else if (action === 'new') {
     inputRouter.requestConfirm('Create new book? Unsaved changes will be lost.', () => {
       bookManager.loadBook({}, "untitled.htz");
       bookManager.createPart(0, 0); // This sets current part to 0,0
@@ -623,14 +624,8 @@ settingsManager.onUpdate = (config) => {
   typingEngine.mapper.DEADZONE = config.deadzone;
   typingEngine.onsetConflictMode = config.onsetConflict;
 
-  if (config.writingSystem && config.writingSystem !== typingEngine.currentMappingName) {
-    typingEngine.setMapping(config.writingSystem);
-  }
 
   // Refresh Editor to reflect cursor changes immediately
-  if (config.font) {
-    document.documentElement.style.setProperty('--app-font', config.font);
-  }
 
   if (focusManager.mode === 'EDITOR' || focusManager.mode === 'GUTTER' || settingsManager.isOpen) {
     const part = bookManager.getCurrentPart();
@@ -642,6 +637,20 @@ settingsManager.onUpdate = (config) => {
 settingsManager.loadSettings(); // Force load from persistence
 settingsManager.render();
 settingsManager.onUpdate(settingsManager.config);
+
+// Link GamepadMenu Deadzone to Settings
+if (gamepadMenu && settingsManager) {
+  // Initialize GamepadMenu with current setting
+  gamepadMenu.setDeadzone(settingsManager.config.deadzone || 0.5);
+
+  // Handle updates from GamepadMenu
+  gamepadMenu.onDeadzoneChange = (val) => {
+    console.log('[Main] Deadzone updated via GamepadMenu:', val);
+    settingsManager.config.deadzone = val;
+    settingsManager.saveSettings();
+    typingEngine.mapper.DEADZONE = val;
+  };
+}
 updateStatusText(focusManager.mode); // Ensure initial status text is shown
 
 
@@ -856,6 +865,17 @@ if (bookManager.loadFromStorage()) {
 
     // Fix Duplication: Ensure EditorMode knows about the loaded content
     if (typeof editorMode !== 'undefined') editorMode.resetState();
+
+    // Apply Metadata from Loaded Book
+    const meta = bookManager.metadata;
+    if (meta && meta.writingSystem) {
+      typingEngine.setMapping(meta.writingSystem);
+    }
+    if (meta && meta.font) {
+      document.documentElement.style.setProperty('--app-font', meta.font);
+    }
+
+    updateStatusText(focusManager.mode);
   }, 100);
 } else {
   // New Session
