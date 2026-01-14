@@ -7,7 +7,7 @@ export class GamepadManager {
 
     constructor() {
         this.controllers = {};
-        this.activeGamepadIndex = null; // Track which controller is being used
+        this.activeGamepadIndex = null;
         this.lastActiveGamepadIndex = null;
         this.animationFrameId = null;
         this.listeners = {
@@ -22,25 +22,12 @@ export class GamepadManager {
         this.lastSelect = false;
         this.lastButtons = {};
 
+        // Standard events (still useful for plug-in/plug-out)
         window.addEventListener("gamepadconnected", this.onGamepadConnected.bind(this));
         window.addEventListener("gamepaddisconnected", this.onGamepadDisconnected.bind(this));
 
-        // Polling for initial connection (some browsers don't fire event if already connected)
-        this.checkInterval = setInterval(this.scanGamepads.bind(this), 500);
-
-        // Also check on user interaction
-        window.addEventListener('click', () => this.scanGamepads());
-        window.addEventListener('keydown', () => this.scanGamepads());
-    }
-
-    scanGamepads() {
-        const gamepads = navigator.getGamepads ? navigator.getGamepads() : (navigator.webkitGetGamepads ? navigator.webkitGetGamepads() : []);
-        for (let i = 0; i < gamepads.length; i++) {
-            if (gamepads[i] && !this.controllers[gamepads[i].index]) {
-                // Manually trigger connect
-                this.onGamepadConnected({ gamepad: gamepads[i] });
-            }
-        }
+        // Start polling immediately to catch already-connected controllers (Steam Deck)
+        this.startPolling();
     }
 
     handleConnect(gamepad) {
@@ -52,6 +39,9 @@ export class GamepadManager {
     }
 
     onGamepadConnected(e) {
+        // Prevent duplicate registration
+        if (this.controllers[e.gamepad.index]) return;
+
         console.log("Gamepad connected", e.gamepad);
         this.controllers[e.gamepad.index] = e.gamepad;
 
@@ -61,15 +51,6 @@ export class GamepadManager {
         }
 
         this.emit('connect', e.gamepad);
-
-        // Start polling if this is the first controller
-        if (Object.keys(this.controllers).length === 1 && !this.animationFrameId) {
-            this.startPolling();
-            if (this.checkInterval) {
-                clearInterval(this.checkInterval);
-                this.checkInterval = null;
-            }
-        }
     }
 
     onGamepadDisconnected(e) {
@@ -77,23 +58,21 @@ export class GamepadManager {
         delete this.controllers[e.gamepad.index];
 
         if (this.activeGamepadIndex === e.gamepad.index) {
-            this.activeGamepadIndex = null; // Will pick new one next poll
-            this.lastActiveGamepadIndex = null; // FORCE RESET to ensure re-connection of same index triggers event
+            this.activeGamepadIndex = null;
+            this.lastActiveGamepadIndex = null;
         }
 
         this.emit('disconnect', e.gamepad);
-
-        if (Object.keys(this.controllers).length === 0) {
-            this.stopPolling();
-        }
     }
 
     startPolling() {
-        const loop = () => {
-            this.poll();
+        if (!this.animationFrameId) {
+            const loop = () => {
+                this.poll();
+                this.animationFrameId = requestAnimationFrame(loop);
+            };
             this.animationFrameId = requestAnimationFrame(loop);
-        };
-        this.animationFrameId = requestAnimationFrame(loop);
+        }
     }
 
     stopPolling() {
@@ -104,16 +83,22 @@ export class GamepadManager {
     }
 
     poll() {
-        // Gamepad objects are snapshots, we need to query them again each frame
+        // Query the browser API every frame
         const gamepads = navigator.getGamepads ? navigator.getGamepads() : (navigator.webkitGetGamepads ? navigator.webkitGetGamepads() : []);
 
-        // 1. Update Controllers & Check Activity (Last Input Wins)
+        // 1. Update Controllers & Auto-Detect New Ones
         for (let i = 0; i < gamepads.length; i++) {
             const gp = gamepads[i];
             if (gp) {
+                // If we found a gamepad that isn't registered yet, register it immediately
+                if (!this.controllers[gp.index]) {
+                    this.handleConnect(gp);
+                }
+
+                // Update the state
                 this.controllers[gp.index] = gp;
 
-                // Check Activity
+                // Check Activity to switch active controller
                 const hasInput = gp.buttons.some(b => b.pressed) || gp.axes.some(a => Math.abs(a) > 0.15);
                 if (hasInput) {
                     this.activeGamepadIndex = gp.index;
@@ -127,7 +112,7 @@ export class GamepadManager {
             if (keys.length > 0) this.activeGamepadIndex = parseInt(keys[0]);
         }
 
-        // 3. Emit Activty Change Check
+        // 3. Emit Activity Change Check
         if (this.activeGamepadIndex !== this.lastActiveGamepadIndex) {
             const newGp = this.controllers[this.activeGamepadIndex];
             if (newGp) {
@@ -145,7 +130,7 @@ export class GamepadManager {
 
     // Simple event emitter
     on(event, callback) {
-        if (!this.listeners[event]) this.listeners[event] = []; // Safety init
+        if (!this.listeners[event]) this.listeners[event] = [];
         if (this.listeners[event]) {
             this.listeners[event].push(callback);
         }
