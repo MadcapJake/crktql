@@ -123,4 +123,4 @@ You can define custom input mappings by adding a `.json` file to the `src/mappin
 - [ ] Allow parts to be external links to websites that load in an iframe
 
 ## License
-[MIT](LICENSE)
+[ACSL](LICENSE)
