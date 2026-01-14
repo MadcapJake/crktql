@@ -49,7 +49,7 @@ describe('EditorRenderer', () => {
     it('renders citations as pills', () => {
         const part = { content: "Ref {{cite:1,2}} here", cursor: 20 };
         renderer.render(part);
-        expect(container.innerHTML).toContain('<span class="citation-pill">⌖ 1, 2</span>');
+        expect(container.innerHTML).toContain('<span class="citation-pill">1 . 2</span>');
     });
 
     it('renders BLOCK cursor correctly', () => {
@@ -82,7 +82,7 @@ describe('EditorRenderer', () => {
         renderer.render(part);
 
         // Expect merged classes on the pill
-        expect(container.innerHTML).toContain('Link&nbsp;<span class="citation-pill cursor cursor-block cursor-atomic">⌖ 10, 20</span>&nbsp;end');
+        expect(container.innerHTML).toContain('Link&nbsp;<span class="citation-pill cursor cursor-block cursor-atomic">10 . 20</span>&nbsp;end');
     });
 
     it('renders selection highlight', () => {

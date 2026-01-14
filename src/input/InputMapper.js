@@ -119,17 +119,42 @@ export class InputMapper {
         const rxVal = axisValue(indices.axes.rx);
         const ryVal = axisValue(indices.axes.ry);
 
+        // Helper to normalize Trigger Axis
+        const readTriggerAxis = (map) => {
+            if (map === undefined) return 0;
+
+            // Standard Axis (Number) -> Assume -1..1 range
+            if (typeof map === 'number') {
+                const raw = axisValue(map);
+                return raw > -1 ? (raw + 1) / 2 : 0;
+            }
+
+            // Complex Axis (Object) -> +aN (0..1) or -aN (0..-1)
+            if (typeof map === 'object' && map.index !== undefined) {
+                const raw = axisValue(map.index);
+                if (map.range === 'positive') {
+                    // 0..1 -> 0..1 (Clamp 0)
+                    return Math.max(0, Math.min(1, raw));
+                }
+                if (map.range === 'negative') {
+                    // 0..-1 -> 0..1 (Inverted)
+                    return Math.max(0, Math.min(1, -raw));
+                }
+            }
+            return 0;
+        };
+
         // Triggers
         let lt = 0, rt = 0;
+
+        // Priority to AXES maps (lt/rt in axes section)
         if (indices.axes.lt !== undefined) {
-            let raw = axisValue(indices.axes.lt);
-            if (raw > -1) lt = (raw + 1) / 2;
+            lt = readTriggerAxis(indices.axes.lt);
         } else if (indices.buttons.lt !== undefined) {
-            // If mapped to a button index or string?
+            // Fallback to Button Map logic (existing)
             const map = indices.buttons.lt;
             if (typeof map === 'number') lt = gamepad.buttons[map]?.value || 0;
             else if (typeof map === 'string' && map.startsWith('a')) {
-                // Mapped to axis
                 const idx = parseInt(map.replace(/[^0-9]/g, ''));
                 let raw = axisValue(idx);
                 if (raw > -1) lt = (raw + 1) / 2;
@@ -137,8 +162,7 @@ export class InputMapper {
         }
 
         if (indices.axes.rt !== undefined) {
-            let raw = axisValue(indices.axes.rt);
-            if (raw > -1) rt = (raw + 1) / 2;
+            rt = readTriggerAxis(indices.axes.rt);
         } else if (indices.buttons.rt !== undefined) {
             const map = indices.buttons.rt;
             if (typeof map === 'number') rt = gamepad.buttons[map]?.value || 0;

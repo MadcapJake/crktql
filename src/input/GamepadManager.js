@@ -1,5 +1,8 @@
 export class GamepadManager {
     getActiveGamepad() {
+        if (this.activeGamepadIndex !== null && this.controllers[this.activeGamepadIndex]) {
+            return this.controllers[this.activeGamepadIndex];
+        }
         const indices = Object.keys(this.controllers);
         if (indices.length > 0) return this.controllers[indices[0]];
         return null;
@@ -55,14 +58,15 @@ export class GamepadManager {
 
     onGamepadDisconnected(e) {
         console.log("Gamepad disconnected", e.gamepad);
-        delete this.controllers[e.gamepad.index];
+        if (this.controllers[e.gamepad.index]) {
+            delete this.controllers[e.gamepad.index];
+            this.emit('disconnect', e.gamepad);
+        }
 
         if (this.activeGamepadIndex === e.gamepad.index) {
             this.activeGamepadIndex = null;
             this.lastActiveGamepadIndex = null;
         }
-
-        this.emit('disconnect', e.gamepad);
     }
 
     startPolling() {
@@ -86,12 +90,30 @@ export class GamepadManager {
         // Query the browser API every frame
         const gamepads = navigator.getGamepads ? navigator.getGamepads() : (navigator.webkitGetGamepads ? navigator.webkitGetGamepads() : []);
 
+        // 0. Poll-based Disconnect Detection
+        // Check if any registered controller is no longer present in the gamepads array or is null
+        Object.keys(this.controllers).forEach(index => {
+            if (!gamepads[index]) {
+                // It disappeared! Manually trigger disconnect.
+                // We use the stored object because 'gamepads[index]' is null.
+                this.handleDisconnect(this.controllers[index]);
+            }
+        });
+
         // 1. Update Controllers & Auto-Detect New Ones
         for (let i = 0; i < gamepads.length; i++) {
             const gp = gamepads[i];
             if (gp) {
-                // If we found a gamepad that isn't registered yet, register it immediately
-                if (!this.controllers[gp.index]) {
+                // Check if we have a registered controller at this index
+                const existing = this.controllers[gp.index];
+
+                if (!existing) {
+                    // New controller at empty slot
+                    this.handleConnect(gp);
+                } else if (existing.id !== gp.id) {
+                    // Controller SWAPPED at same index (disconnect old, connect new)
+                    console.log("Gamepad Swapped at index", gp.index, "Old:", existing.id, "New:", gp.id);
+                    this.handleDisconnect(existing);
                     this.handleConnect(gp);
                 }
 
@@ -99,8 +121,11 @@ export class GamepadManager {
                 this.controllers[gp.index] = gp;
 
                 // Check Activity to switch active controller
-                const hasInput = gp.buttons.some(b => b.pressed) || gp.axes.some(a => Math.abs(a) > 0.15);
-                if (hasInput) {
+                // Ignore axes at -1 (often resting triggers) to prevent false switching
+                const hasInput = gp.buttons.some(b => b.pressed) || gp.axes.some(a => (Math.abs(a) > 0.15 && a > -0.9));
+
+                // Switch if input detected AND it's different from current
+                if (hasInput && this.activeGamepadIndex !== gp.index) {
                     this.activeGamepadIndex = gp.index;
                 }
             }

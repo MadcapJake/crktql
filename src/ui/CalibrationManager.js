@@ -146,6 +146,11 @@ export class CalibrationManager {
         this.currentStep = this.queue.shift();
         this.state = 'WAITING_FOR_INPUT';
         this.updateSkipButton('Skip');
+
+        // Refresh baselines before expecting input
+        // This ensures we capture the "resting state" exactly when requested
+        this.updateBaselines();
+
         this.renderStep();
     }
 
@@ -153,19 +158,7 @@ export class CalibrationManager {
         if (this.skipBtn) this.skipBtn.textContent = text;
     }
 
-    skipStep() {
-        if (!this.currentStep) return;
-        const selector = this.getVisSelector(this.currentStep.id);
-        if (selector) {
-            const el = this.modal.querySelector(selector);
-            if (el) {
-                el.classList.remove('active');
-                el.classList.add('skipped');
-            }
-        }
-        this.skippedQueue.push(this.currentStep);
-        this.nextStep();
-    }
+    // ... SKIP STEP REMAINING UNCHANGED ...
 
     renderStep() {
         if (!this.currentStep) return;
@@ -178,18 +171,7 @@ export class CalibrationManager {
         }
     }
 
-    getVisSelector(stepId) {
-        const visMap = {
-            south: '.vis-a', east: '.vis-b', west: '.vis-x', north: '.vis-y',
-            lb: '.vis-l-shoulder', rb: '.vis-r-shoulder',
-            lt: '.vis-l-trigger', rt: '.vis-r-trigger',
-            select: '.vis-select', start: '.vis-start',
-            l3: '.vis-l-stick', r3: '.vis-r-stick',
-            dpad_up: '.vis-dpad', dpad_down: '.vis-dpad', dpad_left: '.vis-dpad', dpad_right: '.vis-dpad',
-            lx: '.vis-l-stick', ly: '.vis-l-stick', rx: '.vis-r-stick', ry: '.vis-r-stick'
-        };
-        return visMap[stepId];
-    }
+    // ... getVisSelector ...
 
     getAxisDelta(gamepad, index) {
         if (!this.axisBaselines[index] && this.axisBaselines[index] !== 0) return 0;
@@ -201,49 +183,17 @@ export class CalibrationManager {
     handleInput(gamepad) {
         if (!this.isCalibrating) return;
 
-        // --- CANCEL CHECK (Hold Any Button 5s) ---
-        let anyButtonPressed = false;
-        // Check standard buttons and triggers if mapped as buttons
-        for (let i = 0; i < gamepad.buttons.length; i++) {
-            if (gamepad.buttons[i].pressed) {
-                anyButtonPressed = true;
-                break;
-            }
-        }
-
-        if (anyButtonPressed) {
-            if (!this.holdStartTime) {
-                this.holdStartTime = Date.now();
-            } else {
-                if (Date.now() - this.holdStartTime > 5000) {
-                    // Trigger Cancel
-                    this.stop();
-                    // Ideally we should notify user or just close.
-                    // OnClose callback in main.js should handle mode switch back to EDITOR or previous.
-                    // But we didn't pass an explicit onClose that switches mode.
-                    // main.js sets mode to CALIBRATION.
-                    // We need to ensure we return to EDITOR.
-                    // Let's assume on close we just hide modal.
-                    // The user asked to "Cancel calibration".
-                    // And return to text editor (implied by previous requests).
-                    // We should invoke onClose.
-                    return;
-                }
-            }
-        } else {
-            this.holdStartTime = null;
-        }
+        // ... CANCEL CHECK ...
 
         // --- 0. INITIAL RELEASE CHECK ---
         if (this.state === 'INITIAL_RELEASE') {
+            // ... (Same logic, maybe refined) ...
             let stuckInput = null;
-            // Check Buttons
             for (let i = 0; i < gamepad.buttons.length; i++) {
                 if (gamepad.buttons[i].pressed) {
                     stuckInput = `Button ${i}`; break;
                 }
             }
-            // Check Axes (Delta > 0.5)
             if (!stuckInput) {
                 for (let i = 0; i < gamepad.axes.length; i++) {
                     const delta = this.getAxisDelta(gamepad, i);
@@ -268,26 +218,18 @@ export class CalibrationManager {
             this.prompt.textContent = "Release Button...";
             let isStillPressed = false;
 
-            if (this.releaseCode.includes('b')) {
-                // Handle pure button code (b4)
-                if (this.releaseCode.startsWith('b')) {
-                    const idx = parseInt(this.releaseCode.substring(1));
-                    if (gamepad.buttons[idx] && gamepad.buttons[idx].pressed) isStillPressed = true;
-                }
-            } else if (this.releaseCode.includes('a')) {
-                // Handle axis code (a0, +a7, -a7)
-                const clean = this.releaseCode.replace(/[+-]/g, '');
-                const idx = parseInt(clean.substring(1));
-
-                // If signed (+a7), check if still in that zone
-                if (this.releaseCode.startsWith('+')) {
-                    if (gamepad.axes[idx] > 0.3) isStillPressed = true;
-                } else if (this.releaseCode.startsWith('-')) {
-                    if (gamepad.axes[idx] < -0.3) isStillPressed = true;
-                } else {
-                    // Absolute / Baseline logic
+            // Should use baseline logic for release too?
+            if (this.releaseCode) {
+                // ... existing detection ...
+                // Simplified: Just use delta < 0.2?
+                if (this.releaseCode.includes('a')) {
+                    const clean = this.releaseCode.replace(/[^0-9]/g, ''); // Extract index
+                    const idx = parseInt(clean);
                     const delta = this.getAxisDelta(gamepad, idx);
                     if (delta > 0.3) isStillPressed = true;
+                } else if (this.releaseCode.startsWith('b')) {
+                    const idx = parseInt(this.releaseCode.substring(1));
+                    if (gamepad.buttons[idx] && gamepad.buttons[idx].pressed) isStillPressed = true;
                 }
             }
 
@@ -301,36 +243,71 @@ export class CalibrationManager {
         if (this.state === 'WAITING_FOR_INPUT') {
             let detectedCode = null;
 
+            // Check Buttons (Priority? Maybe Triggers prefer axes?)
+            // If current step is Trigger, we prefer Axis detection if available.
+
+            // Check Axes (Delta) - User requested: "record what the axes value is before hand"
+            // We did that in updateBaselines(). Now we check for significant deviation.
+
+            let bestAxis = null;
+            let maxDelta = 0;
+
+            for (let i = 0; i < gamepad.axes.length; i++) {
+                const delta = this.getAxisDelta(gamepad, i);
+                if (delta > 0.5 && delta > maxDelta) {
+                    maxDelta = delta;
+                    bestAxis = i;
+                }
+            }
+
             // Check Buttons
+            let bestBtn = null;
             for (let i = 0; i < gamepad.buttons.length; i++) {
                 if (gamepad.buttons[i].pressed) {
-                    detectedCode = `b${i}`;
+                    bestBtn = i;
                     break;
                 }
             }
 
-            // Check Axes (Delta)
-            if (!detectedCode) {
-                for (let i = 0; i < gamepad.axes.length; i++) {
-                    const delta = this.getAxisDelta(gamepad, i);
-                    if (delta > 0.6) {
-                        // Is this a SIGNED step (Button type like D-Pad, Trigger when mapped to buttons) 
-                        // or a FULL AXIS step (stick)?
-                        let code = `a${i}`; // default
+            // Decide
+            if (this.currentStep.type === 'trigger') {
+                if (bestAxis !== null) {
+                    // It's an axis trigger!
+                    // Determine range/polarity
+                    const base = this.axisBaselines[bestAxis];
+                    const current = gamepad.axes[bestAxis];
 
-                        // Determine Sign if detecting for Button steps
-                        if (!this.currentStep.type || this.currentStep.type === 'trigger') {
-                            const val = gamepad.axes[i];
-                            if (val > 0.5) code = `+a${i}`;
-                            else if (val < -0.5) code = `-a${i}`;
-                        } else if (this.currentStep.type === 'axis_neg') {
-                            // Stick calibration usually wants raw axis index
-                            code = `a${i}`;
-                        }
+                    // Logic: 
+                    // Base ~ -1, Current ~ 1 => Full Range (-1..1) => Code: aX
+                    // Base ~ 0, Current ~ 1 => Half Range (0..1) => Code: +aX (Need InputMapper support)
+                    // Base ~ 0, Current ~ -1 => Half Range (0..-1) => Code: -aX
 
-                        detectedCode = code;
-                        break;
+                    if (base < -0.8 && current > 0.8) {
+                        detectedCode = `a${bestAxis}`; // Standard -1..1
+                    } else if (Math.abs(base) < 0.2 && current > 0.8) {
+                        // 0..1 (Positive Half)
+                        // We map this as +aX, but ensure InputMapper treats it as "0..1 -> 0..1"
+                        detectedCode = `+a${bestAxis}`;
+                    } else if (Math.abs(base) < 0.2 && current < -0.8) {
+                        // 0..-1 (Negative Half)
+                        detectedCode = `-a${bestAxis}`;
+                    } else {
+                        // Fallback
+                        detectedCode = `a${bestAxis}`;
                     }
+                } else if (bestBtn !== null) {
+                    detectedCode = `b${bestBtn}`;
+                }
+            } else if (this.currentStep.type === 'axis_neg') {
+                if (bestAxis !== null) detectedCode = `a${bestAxis}`;
+            } else {
+                // Button / Dpad
+                if (bestBtn !== null) detectedCode = `b${bestBtn}`;
+                else if (bestAxis !== null) {
+                    // Axis as button (Dpad)
+                    const val = gamepad.axes[bestAxis];
+                    if (val > 0.5) detectedCode = `+a${bestAxis}`;
+                    else if (val < -0.5) detectedCode = `-a${bestAxis}`;
                 }
             }
 

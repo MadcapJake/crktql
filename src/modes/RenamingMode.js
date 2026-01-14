@@ -13,6 +13,9 @@ export class RenamingMode extends TextEntryMode {
         this.visualizer = deps.visualizer;
         this.lastEngineTextLength = 0;
         this.wasActive = false;
+
+        // Track button state for edge detection within this mode
+        this.lastButtons = {};
     }
 
     activate() {
@@ -24,40 +27,61 @@ export class RenamingMode extends TextEntryMode {
             this.typingEngine.state.cursor = txt.length;
         }
         this.wasActive = true;
+        this.lastButtons = {};
     }
 
     handleInput(frameInput, gamepad) {
         if (!this.wasActive) this.activate();
 
-        // Save (B / East)
-        if (frameInput.buttons.east && !this.lastDpad.east) {
-            this.save(frameInput);
+        // Edge Detection helper
+        const pressed = (btn) => frameInput.buttons[btn] && !this.lastButtons[btn];
+
+        // 1. Cancel (Select) - Return to Overview
+        // EXCLUSIVE: Return immediately, do NOT process frame.
+        if (pressed('select')) {
+            this.cancel(frameInput);
+            this.lastButtons = { ...frameInput.buttons };
             return;
         }
 
-        // Cancel (Select)
-        if (frameInput.buttons.select) {
-            this.cancel(frameInput);
+        // 2. Save (B / East) - Replacing Newline behavior
+        // EXCLUSIVE: Return immediately, do NOT process frame.
+        if (pressed('east')) {
+            this.save(frameInput);
+            this.lastButtons = { ...frameInput.buttons };
             return;
+        }
+
+        // 3. Space (A / South) 
+        // We let this fall through to TypingEngine explicitly, 
+        // OR we type it here and block TypingEngine from seeing the button.
+        // For robustness: TypingEngine might have its own debouncing.
+        // If we want "ironclad" A = Space, we can force it here.
+        if (pressed('south')) {
+            // We could manually trigger typeCharacter(' ') here.
+            // this.typingEngine.typeCharacter(' ');
+            // But TypingEngine handles South internally.
+            // We just ensure we DO pass the frame down.
         }
 
         const dpad = frameInput.buttons.dpad;
 
-        // 1. Get Current State
+        // 4. Get Current State
         const txt = this.typingEngine.getBufferText();
         let cur = this.typingEngine.state.cursor;
         if (typeof cur === 'undefined') cur = txt.length;
 
-        // 2. Navigation (Single Line)
+        // 5. Navigation (Single Line)
         cur = this.navigate(dpad, cur, txt, true);
 
-        // 3. Sync to Engine (Nav Update)
+        // 6. Sync to Engine (Nav Update)
         this.typingEngine.state.cursor = cur;
 
-        // 4. Process Typing
+        // 7. Process Typing (Sticks + A/South)
+        // Only if we haven't returned!
         const state = this.typingEngine.processFrame(gamepad);
 
-        // 5. Handle Changes via processTextChange
+        // 8. Handle Changes via processTextChange
         if (state) {
             const result = this.processTextChange(
                 txt,
@@ -84,13 +108,15 @@ export class RenamingMode extends TextEntryMode {
                 this.renderIfChanged(this.editorRenderer, state.text, cur);
             }
 
-            // 6. Update Visualizer
+            // 9. Update Visualizer
             if (this.visualizer) {
                 this.visualizer.update(frameInput, state.mode, this.typingEngine.mappings, this.typingEngine.state.syllable);
             }
         } else {
             this.renderIfChanged(this.editorRenderer, txt, cur);
         }
+
+        this.lastButtons = { ...frameInput.buttons };
     }
 
     save(frameInput) {

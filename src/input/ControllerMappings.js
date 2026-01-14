@@ -14,7 +14,11 @@ export class ControllerMappings {
         // B=0, A=1, Y=2, X=3, L=4, R=5, ZL=6, ZR=7, Minus=8, Plus=9, L3=10, R3=11, Home=12, Capture=13
         // BUT user says Start=11.
 
-        this.addMapping('2dc8-6009', '8BitDo Pro 3 (User Config)', 'a:b0,b:b1,x:b2,y:b3,back:b10,start:b11,leftstick:b12,rightstick:b13,leftshoulder:b6,rightshoulder:b7,dpup:h0.1,dpdown:h0.4,dpleft:h0.8,dpright:h0.2,leftx:a0,lefty:a1,rightx:a2,righty:a3,lefttrigger:a4,righttrigger:a5');
+        this.addMapping('2dc8-6009', '8BitDo Pro 3 (User Config)', 'a:b1,b:b0,x:b2,y:b3,back:b10,start:b11,leftstick:b12,rightstick:b13,leftshoulder:b6,rightshoulder:b7,dpup:h0.1,dpdown:h0.4,dpleft:h0.8,dpright:h0.2,leftx:a0,lefty:a1,rightx:a2,righty:a3,lefttrigger:a4,righttrigger:a5');
+
+        // 8BitDo Ultimate Wireless (Standard Layout)
+        // Fixes issue where generic fallback applied Pro 3 mapping to Ultimate
+        this.addMapping('2dc8-3106', '8BitDo Ultimate Wireless', 'a:b0,b:b1,x:b2,y:b3,back:b8,start:b9,leftstick:b10,rightstick:b11,leftshoulder:b4,rightshoulder:b5,lefttrigger:b6,righttrigger:b7,dpup:b12,dpdown:b13,dpleft:b14,dpright:b15,leftx:a0,lefty:a1,rightx:a2,righty:a3');
 
         this.loadFromStorage();
     }
@@ -39,13 +43,10 @@ export class ControllerMappings {
     }
 
     findMapping(gamepad) {
-        // Try to construct a GUID-like string or ID from the gamepad
-        // Browsers don't always give the standard SDL GUID.
-        // Chrome/Edge: "Vendor: 2dc8 Product: 6009" in ID string.
-
+        // Try to construct a layout-agnostic ID or match name
         const id = gamepad.id.toLowerCase();
 
-        // Regex to extract Vendor and Product
+        // 1. Precise Match (Vendor-Product)
         const vendorMatch = id.match(/vendor:\s*([0-9a-f]{4})/);
         const productMatch = id.match(/product:\s*([0-9a-f]{4})/);
 
@@ -54,13 +55,19 @@ export class ControllerMappings {
             if (this.mappings[key]) return this.mappings[key];
         }
 
-        // Fallback to generic user-custom if exists
-        // This handles cases where regex fails (e.g. "XInput Controller") but user calibrated
+        // 2. Name Match Fallback (e.g. "8BitDo Pro 2" without standard vendor ID string)
+        if (id.includes('8bitdo') || id.includes('pro 2') || id.includes('pro 3')) {
+            // Check if we have a generic '8bitdo' mapping, or reuse the '2dc8-6009' one
+            // We'll return the one we know works for verified 8BitDo users
+            return this.mappings['2dc8-6009'];
+        }
+
+        // 3. Fallback to generic user-custom if exists
         if (this.mappings['user-custom']) {
             return this.mappings['user-custom'];
         }
 
-        return null; // No custom mapping found
+        return null;
     }
 
     parseMapping(str) {
@@ -71,15 +78,16 @@ export class ControllerMappings {
             if (!part.includes(':')) return;
             const [target, source] = part.split(':');
 
-            // source is like 'b0', 'a1', 'h0.1'
+            // source is like 'b0', 'a1', 'h0.1', '+a5', '-a5'
             if (source.startsWith('b')) {
                 map.buttons[target] = parseInt(source.substring(1));
             } else if (source.startsWith('a')) {
                 map.axes[target] = parseInt(source.substring(1));
+            } else if (source.startsWith('+a')) {
+                map.axes[target] = { index: parseInt(source.substring(2)), range: 'positive' };
+            } else if (source.startsWith('-a')) {
+                map.axes[target] = { index: parseInt(source.substring(2)), range: 'negative' };
             } else if (source.startsWith('h')) {
-                // Hat/D-Pad: h0.1, h0.2 etc.
-                // We'll treat these specially if needed, or mapping them to virtual buttons?
-                // For now, let's store them as special 'hat' entries
                 map.buttons[target] = { type: 'hat', val: source };
             }
         });
