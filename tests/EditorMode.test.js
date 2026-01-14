@@ -23,7 +23,9 @@ describe('EditorMode', () => {
                 setCurrentPartContent: vi.fn(),
                 setPartCursor: vi.fn(),
                 currentPartKey: "0,0",
-                selectPart: vi.fn()
+                selectPart: vi.fn(),
+                setDesiredColumn: vi.fn(),
+                getDesiredColumn: vi.fn()
             },
             historyManager: {
                 undo: vi.fn().mockResolvedValue(null),
