@@ -112,7 +112,6 @@ You can define custom input mappings by adding a `.json` file to the `src/mappin
 - `src/data/`: Book data and history
 
 ## TODO
-
 - [ ] Add mapping field STARTING_PART_NAME for default new part name given
 - [ ] Move to IndexedDB from LocalStorage for async autosave and session restore
 - [ ] Spellcheck Mode (shoulder buttons nav thru errors) (customizable w/ hunspell files)
