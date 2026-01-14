@@ -445,8 +445,27 @@ bookMenu.onAction = (action) => {
     if (part) editorRenderer.render(part);
   } else if (action === 'new') {
     inputRouter.requestConfirm('Create new book? Unsaved changes will be lost.', () => {
-      bookManager.loadBook({}, "untitled.htz");
-      bookManager.createPart(0, 0); // This sets current part to 0,0
+      // Get Defaults from Mapping
+      // CORRECTION: typingEngine.mappings IS the current active mapping object.
+      const mapping = typingEngine.mappings;
+      const bookName = mapping?.STARTING_BOOK_NAME || "Untitled Book";
+      const partName = mapping?.STARTING_MAIN_NAME || "Main";
+      const writingSystem = typingEngine.currentMappingName;
+      // Font is harder to guess, defaulting to current or from mapping if we had it there?
+      // User didn't specify font in mapping, so stick to current set font or default.
+      const currentFont = getComputedStyle(document.documentElement).getPropertyValue('--app-font').trim().replace(/['"]/g, '') || "Courier New";
+
+      if (bookManager.startNewBook) {
+        bookManager.startNewBook(partName, writingSystem, currentFont);
+        bookManager.setBookName(bookName); // Updates filename too
+      } else {
+        // Fallback if startNewBook missing (it shouldn't be)
+        bookManager.loadBook({}, "untitled.htz");
+        bookManager.createPart(0, 0);
+        bookManager.setBookName(bookName);
+        const p = bookManager.getPart(0, 0);
+        if (p) p.name = partName;
+      }
 
       // Update Editor State
       const part = bookManager.getCurrentPart();

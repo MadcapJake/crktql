@@ -1,6 +1,7 @@
 {
     "STARTING_BOOK_NAME": "tômôs",
     "STARTING_MAIN_NAME": "niwos",
+    "STAGING_BRACKETS": "⟦⟧",
     "ONSET": {
         "DEFAULT_VOWEL": "o",
         "LEFT": {

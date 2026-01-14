@@ -12,9 +12,6 @@ export class EditorRenderer {
         const content = part.content || "";
         const cursor = part.cursor || 0;
 
-        // Pending Syllable Logic
-        const pending = this.typingEngine.getFormattedSyllable();
-
         // HTML Escaping & Citation Rendering
         const safeEscape = (str) => {
             let escaped = str.replace(/&/g, '&amp;')
@@ -29,6 +26,21 @@ export class EditorRenderer {
 
         const processText = safeEscape;
         const esc = safeEscape;
+
+        // Pending Syllable Logic
+        const pending = this.typingEngine.getFormattedSyllable();
+        let pendingHtml = '';
+
+        if (pending) {
+            // CORRECTION: typingEngine.mappings IS the object.
+            const mapping = this.typingEngine.mappings;
+            const brackets = mapping?.STAGING_BRACKETS || "";
+            const open = brackets.length >= 1 ? brackets[0] : "";
+            const close = brackets.length >= 2 ? brackets[1] : "";
+            // User said "instead of using bold text", which implies structure change.
+            // We keep the class for potential color/styling, but formatting changes.
+            pendingHtml = `<span class="pending-text">${open}${esc(pending)}${close}</span>`;
+        }
 
         // Selection Logic
         const anchor = selectionAnchor;
@@ -54,8 +66,6 @@ export class EditorRenderer {
             // Standard Cursor Logic
             const before = content.slice(0, cursor);
             const after = content.slice(cursor);
-
-            const pendingHtml = pending ? `<span class="pending-text">${esc(pending)}</span>` : '';
 
             // Determine Cursor Type
             const cursorType = this.settingsManager?.config?.cursorType || 'BAR';
