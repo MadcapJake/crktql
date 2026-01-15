@@ -26,7 +26,9 @@ describe('Clipboard Integration', () => {
         const bookManager = {
             getCurrentPart: vi.fn().mockReturnValue({ content: "Hello World", cursor: 0 }),
             setCurrentPartContent: vi.fn(),
-            setPartCursor: vi.fn(), // Missing in previous mocks?
+            setPartCursor: vi.fn(),
+            setDesiredColumn: vi.fn(),
+            getDesiredColumn: vi.fn(),
             currentPartKey: "0,0"
         };
 

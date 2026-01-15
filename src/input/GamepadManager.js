@@ -12,6 +12,7 @@ export class GamepadManager {
         this.controllers = {};
         this.activeGamepadIndex = null;
         this.lastActiveGamepadIndex = null;
+        this.lockedIndex = null;
         this.animationFrameId = null;
         this.listeners = {
             'frame': [],
@@ -125,7 +126,8 @@ export class GamepadManager {
                 const hasInput = gp.buttons.some(b => b.pressed) || gp.axes.some(a => (Math.abs(a) > 0.15 && a > -0.9));
 
                 // Switch if input detected AND it's different from current
-                if (hasInput && this.activeGamepadIndex !== gp.index) {
+                // Switch if input detected AND it's different from current AND not locked
+                if (hasInput && this.activeGamepadIndex !== gp.index && this.lockedIndex === null) {
                     this.activeGamepadIndex = gp.index;
                 }
             }
@@ -172,5 +174,16 @@ export class GamepadManager {
         this.lastStart = input.buttons.start;
         this.lastSelect = input.buttons.select;
         this.lastButtons = { ...input.buttons };
+    }
+
+    lock(index) {
+        console.log(`GamepadManager: Locking focus to Controller ${index}`);
+        this.lockedIndex = index;
+        this.activeGamepadIndex = index; // Force switch immediately
+    }
+
+    unlock() {
+        console.log("GamepadManager: Unlocking focus");
+        this.lockedIndex = null;
     }
 }

@@ -61,6 +61,13 @@ export class CalibrationManager {
     start() {
         this.isCalibrating = true;
         this.calibrationData = { buttons: {}, axes: {} };
+
+        // Lock GamepadManager to the current active controller
+        const active = this.gamepadManager.getActiveGamepad();
+        if (active) {
+            this.gamepadManager.lock(active.index);
+        }
+
         this.queue = [...this.allSteps];
         this.skippedQueue = [];
         this.state = 'INITIAL_RELEASE';
@@ -88,6 +95,7 @@ export class CalibrationManager {
 
     stop() {
         this.isCalibrating = false;
+        this.gamepadManager.unlock(); // Unlock focus
         this.state = 'IDLE';
         this.modal.style.display = 'none';
         if (this.onClose) this.onClose();
@@ -159,6 +167,33 @@ export class CalibrationManager {
     }
 
     // ... SKIP STEP REMAINING UNCHANGED ...
+    // ... SKIP STEP REMAINING UNCHANGED ...
+    skipStep() {
+        if (!this.currentStep) return;
+        this.skippedQueue.push(this.currentStep);
+        const selector = this.getVisSelector(this.currentStep.id);
+        if (selector) {
+            const el = this.modal.querySelector(selector);
+            if (el) {
+                el.classList.add('skipped');
+                el.classList.remove('active');
+            }
+        }
+        this.nextStep();
+    }
+
+    getVisSelector(id) {
+        const map = {
+            south: '.vis-a', east: '.vis-b', west: '.vis-x', north: '.vis-y',
+            lb: '.vis-l-shoulder', rb: '.vis-r-shoulder',
+            lt: '.vis-l-trigger', rt: '.vis-r-trigger',
+            select: '.vis-select', start: '.vis-start',
+            l3: '.vis-l-stick', r3: '.vis-r-stick',
+            dpad_up: '.vis-dpad', dpad_down: '.vis-dpad', dpad_left: '.vis-dpad', dpad_right: '.vis-dpad',
+            lx: '.vis-l-stick', ly: '.vis-l-stick', rx: '.vis-r-stick', ry: '.vis-r-stick'
+        };
+        return map[id];
+    }
 
     renderStep() {
         if (!this.currentStep) return;
@@ -166,8 +201,10 @@ export class CalibrationManager {
         const selector = this.getVisSelector(this.currentStep.id);
         if (selector) {
             const el = this.modal.querySelector(selector);
-            el.classList.remove('skipped');
-            el.classList.add('active');
+            if (el) {
+                el.classList.remove('skipped');
+                el.classList.add('active');
+            }
         }
     }
 

@@ -1,6 +1,18 @@
-
-import { test, expect } from 'vitest';
+/**
+ * @vitest-environment jsdom
+ */
+import { test, expect, vi, beforeAll } from 'vitest';
 import { TypingEngine } from '../src/engine/TypingEngine.js';
+
+beforeAll(() => {
+    // Simple Mock for LocalStorage if jsdom doesn't fully satisfy logic or to be explicit
+    global.localStorage = {
+        getItem: vi.fn(),
+        setItem: vi.fn(),
+        removeItem: vi.fn(),
+        clear: vi.fn()
+    };
+});
 
 test('TypingEngine switches mappings correctly', () => {
     const engine = new TypingEngine();
