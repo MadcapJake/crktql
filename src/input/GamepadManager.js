@@ -31,8 +31,23 @@ export class GamepadManager {
         window.addEventListener("gamepadconnected", this.onGamepadConnected.bind(this));
         window.addEventListener("gamepaddisconnected", this.onGamepadDisconnected.bind(this));
 
+        // interaction listeners to "wake up" the API on first click/tap
+        const wakeUp = () => {
+            this.scanGamepads();
+            // Optional: remove listeners after first successful detection if desired, 
+            // but keeping them is safer for re-connections.
+        };
+        window.addEventListener('click', wakeUp);
+        window.addEventListener('keydown', wakeUp);
+        window.addEventListener('touchstart', wakeUp);
+
         // Start polling immediately to catch already-connected controllers (Steam Deck)
         this.startPolling();
+    }
+
+    // New helper to force-check API (useful for wake-up events)
+    scanGamepads() {
+        this.poll();
     }
 
     handleConnect(gamepad) {
