@@ -142,6 +142,7 @@ let selectionAnchor = null;
 let currentNotificationTimeout = null;
 
 const bookManager = new BookManager();
+bookManager.setTypingEngine(typingEngine);
 const historyManager = new HistoryManager(bookManager);
 const focusManager = new FocusManager();
 

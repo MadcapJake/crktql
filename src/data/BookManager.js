@@ -23,6 +23,10 @@ export class BookManager {
         return this.desiredColumns.get(this.currentPartKey);
     }
 
+    setTypingEngine(engine) {
+        this.typingEngine = engine;
+    }
+
     startNewBook(initialPartName = "Main", writingSystem = "Latin", font = "Courier New") {
         this.book = {
             "0,0": { name: initialPartName, content: "", cursor: 0 }
@@ -131,12 +135,8 @@ export class BookManager {
         const key = `${x},${y}`;
         if (this.book[key]) return false; // Already exists
 
-        // Initial Name? Just Unnamed or based on Mapping?
-        // User request: "When creating a new book, use STARTING_MAIN_NAME... for the first part"
-        // This method is for NEW PARTS in EXISTING book.
-        // So just "Unnamed" or generic is fine.
         this.book[key] = {
-            name: "Unnamed",
+            name: this.typingEngine?.mappings?.STARTING_PART_NAME || "Unnamed",
             content: "",
             cursor: 0
         };
