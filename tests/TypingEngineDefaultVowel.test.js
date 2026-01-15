@@ -10,7 +10,7 @@ global.localStorage = {
     clear: vi.fn(),
 };
 
-test.skip('TypingEngine respects empty string as DEFAULT_VOWEL', () => {
+test('TypingEngine respects empty string as DEFAULT_VOWEL', () => {
     const engine = new TypingEngine();
 
     // Mock Mapping with Empty Default Vowel
@@ -41,6 +41,15 @@ test.skip('TypingEngine respects empty string as DEFAULT_VOWEL', () => {
         buttons: { dpad: {} },
         id: "Mock Gamepad",
         axes: [0, 0, 0, 0] // Required by InputMapper
+    };
+
+    // Fix: initialize state.lastInput so handleStickInput doesn't abort
+    engine.state.lastInput = {
+        sticks: {
+            left: { active: true, sector: 'EAST' },
+            right: { active: false }
+        },
+        buttons: { dpad: {} }
     };
 
     let typed = "";
