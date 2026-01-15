@@ -96,6 +96,7 @@ You can define custom input mappings by adding a `.json` file to the `src/mappin
 
 - **STARTING_BOOK_NAME**: The default name used for the book when creating a new one with this writing system active.
 - **STARTING_MAIN_NAME**: The default name for the first part (0,0) created in a new book.
+- **STARTING_PART_NAME**: The default name for all new parts created.
 - **STAGING_BRACKETS**: A two-character string (e.g., "⟦⟧") used to wrap the syllable currently being constructed (staged) in the editor view.
 - **ONSET.DEFAULT_VOWEL**: The vowel automatically appended when releasing an onset stick without selecting a rime (e.g., 'a' or 'o').
 - **RIME.ORDER**: Defines the syllable construction order.
@@ -112,7 +113,7 @@ You can define custom input mappings by adding a `.json` file to the `src/mappin
 - `src/data/`: Book data and history
 
 ## TODO
-- [ ] Add mapping field STARTING_PART_NAME for default new part name given
+- [x] Add mapping field STARTING_PART_NAME for default new part name given
 - [ ] Move to IndexedDB from LocalStorage for async autosave and session restore
 - [ ] Spellcheck Mode (shoulder buttons nav thru errors) (customizable w/ hunspell files)
 - [ ] Home/End/Top/Bottom using another chording key
