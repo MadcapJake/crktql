@@ -89,6 +89,10 @@ gamepadMenu.onCalibrate = () => {
   }
 };
 
+gamepadMenu.onDeadzoneChange = (val) => {
+  gamepadManager.setDeadzone(val);
+};
+
 // Handle Connection Events for UI
 const updateGamepadUI = (gp) => {
   const btn = document.getElementById('gamepad-btn');

@@ -13,6 +13,7 @@ export class GamepadManager {
         this.activeGamepadIndex = null;
         this.lastActiveGamepadIndex = null;
         this.lockedIndex = null;
+        this.deadzone = 0.5;
         this.animationFrameId = null;
         this.listeners = {
             'frame': [],
@@ -123,7 +124,7 @@ export class GamepadManager {
 
                 // Check Activity to switch active controller
                 // Ignore axes at -1 (often resting triggers) to prevent false switching
-                const hasInput = gp.buttons.some(b => b.pressed) || gp.axes.some(a => (Math.abs(a) > 0.15 && a > -0.9));
+                const hasInput = gp.buttons.some(b => b.pressed) || gp.axes.some(a => (Math.abs(a) > this.deadzone && a > -0.9));
 
                 // Switch if input detected AND it's different from current
                 // Switch if input detected AND it's different from current AND not locked
@@ -185,5 +186,9 @@ export class GamepadManager {
     unlock() {
         console.log("GamepadManager: Unlocking focus");
         this.lockedIndex = null;
+    }
+
+    setDeadzone(val) {
+        this.deadzone = val;
     }
 }
