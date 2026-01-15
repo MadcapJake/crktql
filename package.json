@@ -13,5 +13,8 @@
     "jsdom": "^27.4.0",
     "vite": "^5.0.0",
     "vitest": "^4.0.17"
+  },
+  "dependencies": {
+    "idb-keyval": "^6.2.2"
   }
 }

@@ -1,3 +1,5 @@
+import { get, set } from 'idb-keyval';
+
 export class BookManager {
     constructor() {
         this.book = {
@@ -189,7 +191,7 @@ export class BookManager {
     // Persistence
     saveToStorage() {
         if (this.saveTimeout) clearTimeout(this.saveTimeout);
-        this.saveTimeout = setTimeout(() => {
+        this.saveTimeout = setTimeout(async () => {
             try {
                 const data = {
                     parts: this.book,
@@ -198,20 +200,22 @@ export class BookManager {
                     currentPartKey: this.currentPartKey,
                     filename: this.filename
                 };
-                localStorage.setItem('crktqla_book', JSON.stringify(data));
-                console.log('[BookManager] Auto-saved book');
+
+                // Use idb-keyval
+                await set('active-book', data);
+                console.log('[BookManager] Auto-saved book to IndexedDB');
             } catch (e) {
                 console.error('[BookManager] Save failed:', e);
             }
         }, 1000); // 1s Debounce
     }
 
-    loadFromStorage() {
+    async loadFromStorage() {
         try {
-            const saved = localStorage.getItem('crktqla_book');
-            if (saved) {
-                const data = JSON.parse(saved);
+            // Retrieve from IndexedDB
+            const data = await get('active-book');
 
+            if (data) {
                 // Handle Migration from Old Storage (which had .book = parts)
                 if (data.parts) {
                     this.book = data.parts;
@@ -227,7 +231,7 @@ export class BookManager {
                 if (data.currentPartKey) this.currentPartKey = data.currentPartKey;
                 if (data.filename) this.filename = data.filename;
 
-                console.log('[BookManager] Loaded book from storage', { name: this.bookName });
+                console.log('[BookManager] Loaded book from IndexedDB', { name: this.bookName });
                 return true;
             }
         } catch (e) {

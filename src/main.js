@@ -874,38 +874,42 @@ window.addEventListener('request-citation-insert', (e) => {
 // --- Main Loop ---
 // --- Initialization ---
 // Load Persistence last to ensure UI helpers (showNotification) are ready
-if (bookManager.loadFromStorage()) {
-  setTimeout(() => {
-    if (typeof showNotification === 'function') {
-      showNotification("Restored Book from Storage");
-    }
-    // Refresh Editor State with Loaded Data
-    const part = bookManager.getCurrentPart();
-    if (part) {
-      typingEngine.reset(part.content);
-      lastEngineTextLength = part.content.length; // Ensure global sync
-      if (typeof editorRenderer !== 'undefined') editorRenderer.render(part, null);
-    }
+(async function init() {
+  if (await bookManager.loadFromStorage()) {
+    setTimeout(() => {
+      if (typeof showNotification === 'function') {
+        showNotification("Restored Book from Storage");
+      }
+      // Refresh Editor State with Loaded Data
+      const part = bookManager.getCurrentPart();
+      if (part) {
+        typingEngine.reset(part.content);
+        lastEngineTextLength = part.content.length; // Ensure global sync
+        if (typeof editorRenderer !== 'undefined') editorRenderer.render(part, null);
+      }
+      focusManager.setMode('EDITOR');
+
+      // Fix Duplication: Ensure EditorMode knows about the loaded content
+      if (typeof editorMode !== 'undefined') editorMode.resetState();
+
+      // Apply Metadata from Loaded Book
+      const meta = bookManager.metadata;
+      if (meta && meta.writingSystem) {
+        typingEngine.setMapping(meta.writingSystem);
+      }
+      if (meta && meta.font) {
+        document.documentElement.style.setProperty('--app-font', meta.font);
+      }
+
+      updateStatusText(focusManager.mode);
+    }, 100);
+  } else {
+    // New Session
     focusManager.setMode('EDITOR');
+  }
 
-    // Fix Duplication: Ensure EditorMode knows about the loaded content
-    if (typeof editorMode !== 'undefined') editorMode.resetState();
-
-    // Apply Metadata from Loaded Book
-    const meta = bookManager.metadata;
-    if (meta && meta.writingSystem) {
-      typingEngine.setMapping(meta.writingSystem);
-    }
-    if (meta && meta.font) {
-      document.documentElement.style.setProperty('--app-font', meta.font);
-    }
-
-    updateStatusText(focusManager.mode);
-  }, 100);
-} else {
-  // New Session
-  focusManager.setMode('EDITOR');
-}
+  // Start Game Loop if not already running (it is running below via Raf)
+})();
 
 
 // --- Game Loop ---
