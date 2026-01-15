@@ -114,7 +114,7 @@ You can define custom input mappings by adding a `.json` file to the `src/mappin
 
 ## TODO
 - [x] Add mapping field STARTING_PART_NAME for default new part name given
-- [ ] Move to IndexedDB from LocalStorage for async autosave and session restore
+- [x] Move to IndexedDB from LocalStorage for async autosave and session restore
 - [ ] Spellcheck Mode (shoulder buttons nav thru errors) (customizable w/ hunspell files)
 - [ ] Home/End/Top/Bottom using another chording key
 - [ ] In Overview Mode, Home navigates to main part (0,0), but End/Top/Bottom do nothing
