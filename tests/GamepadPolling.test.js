@@ -33,6 +33,28 @@ describe('GamepadManager', () => {
         expect(manager.controllers[0].id).toBe('Steam Deck');
     });
 
+    it('stays connected if only disconnected for a frame', () => {
+        const mockGamepad = { index: 0, id: 'Xbox', buttons: [], axes: [] };
+        navigator.getGamepads = vi.fn().mockReturnValue([mockGamepad]);
+
+        manager = new GamepadManager();
+        vi.advanceTimersByTime(50);
+        expect(manager.controllers[0]).toBeDefined();
+
+        // Simulate disconnect (API returns null at index 0)
+        navigator.getGamepads = vi.fn().mockReturnValue([null]);
+
+        // Spy on disconnect event
+        const onDisconnect = vi.fn();
+        manager.on('disconnect', onDisconnect);
+
+        // Must wait longer than DISCONNECT_THRESHOLD
+        vi.advanceTimersByTime(16);
+
+        expect(manager.controllers[0]).toBeDefined();
+        expect(onDisconnect).not.toHaveBeenCalled();
+    });
+
     it('handles "Ghost" disconnects when API returns null', () => {
         const mockGamepad = { index: 0, id: 'Xbox', buttons: [], axes: [] };
         navigator.getGamepads = vi.fn().mockReturnValue([mockGamepad]);
@@ -48,7 +70,8 @@ describe('GamepadManager', () => {
         const onDisconnect = vi.fn();
         manager.on('disconnect', onDisconnect);
 
-        vi.advanceTimersByTime(50);
+        // Must wait longer than DISCONNECT_THRESHOLD
+        vi.advanceTimersByTime(80);
 
         expect(manager.controllers[0]).toBeUndefined();
         expect(onDisconnect).toHaveBeenCalled();

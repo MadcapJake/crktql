@@ -1,8 +1,10 @@
 export class GamepadManager {
     getActiveGamepad() {
+        // Safety check: ensure the active index actually points to a valid controller
         if (this.activeGamepadIndex !== null && this.controllers[this.activeGamepadIndex]) {
             return this.controllers[this.activeGamepadIndex];
         }
+        // Fallback: grab the first available one
         const indices = Object.keys(this.controllers);
         if (indices.length > 0) return this.controllers[indices[0]];
         return null;
@@ -14,6 +16,10 @@ export class GamepadManager {
         this.lastActiveGamepadIndex = null;
         this.lockedIndex = null;
         this.deadzone = 0.5;
+
+        this.missingFrames = {};
+        this.DISCONNECT_THRESHOLD = 5; // Number of frames to wait before declaring a controller disconnected
+
         this.animationFrameId = null;
         this.listeners = {
             'frame': [],
@@ -32,11 +38,7 @@ export class GamepadManager {
         window.addEventListener("gamepaddisconnected", this.onGamepadDisconnected.bind(this));
 
         // interaction listeners to "wake up" the API on first click/tap
-        const wakeUp = () => {
-            this.scanGamepads();
-            // Optional: remove listeners after first successful detection if desired, 
-            // but keeping them is safer for re-connections.
-        };
+        const wakeUp = () => { this.scanGamepads() };
         window.addEventListener('click', wakeUp);
         window.addEventListener('keydown', wakeUp);
         window.addEventListener('touchstart', wakeUp);
@@ -45,7 +47,9 @@ export class GamepadManager {
         this.startPolling();
     }
 
-    // New helper to force-check API (useful for wake-up events)
+    /**
+     * Force-check API (useful for wake-up events)
+     */
     scanGamepads() {
         this.poll();
     }
@@ -64,6 +68,7 @@ export class GamepadManager {
 
         console.log("Gamepad connected", e.gamepad);
         this.controllers[e.gamepad.index] = e.gamepad;
+        this.missingFrames[e.gamepad.index] = 0; // Reset counter
 
         // Default to this one if none active
         if (this.activeGamepadIndex === null) {
@@ -74,9 +79,10 @@ export class GamepadManager {
     }
 
     onGamepadDisconnected(e) {
-        console.log("Gamepad disconnected", e.gamepad);
         if (this.controllers[e.gamepad.index]) {
+            console.log("Gamepad disconnected", e.gamepad);
             delete this.controllers[e.gamepad.index];
+            delete this.missingFrames[e.gamepad.index]; // Cleanup counter
             this.emit('disconnect', e.gamepad);
         }
 
@@ -109,11 +115,24 @@ export class GamepadManager {
 
         // 0. Poll-based Disconnect Detection
         // Check if any registered controller is no longer present in the gamepads array or is null
-        Object.keys(this.controllers).forEach(index => {
+        Object.keys(this.controllers).forEach(key => {
+            const index = parseInt(key);
+
+            // Check if this controller is missing from the browser's list
             if (!gamepads[index]) {
-                // It disappeared! Manually trigger disconnect.
-                // We use the stored object because 'gamepads[index]' is null.
-                this.handleDisconnect(this.controllers[index]);
+                // Increment missing counter
+                this.missingFrames[index] = (this.missingFrames[index] || 0) + 1;
+
+                // If it's been missing for too long, declare it disconnected
+                if (this.missingFrames[index] >= this.DISCONNECT_THRESHOLD) {
+                    // It disappeared! Manually trigger disconnect.
+                    // We use the stored object because 'gamepads[index]' is null.
+                    this.handleDisconnect(this.controllers[index]);
+                }
+            } else {
+                // It exists! Reset the counter immediately.
+                // This heals any 1-frame "blips" from the browser API.
+                this.missingFrames[index] = 0;
             }
         });
 
@@ -132,10 +151,12 @@ export class GamepadManager {
                     console.log("Gamepad Swapped at index", gp.index, "Old:", existing.id, "New:", gp.id);
                     this.handleDisconnect(existing);
                     this.handleConnect(gp);
+                } else {
+                    // Existing controller at same index
+                    this.controllers[gp.index] = gp;
+                    // Ensure reset missing counter since we saw it again
+                    this.missingFrames[gp.index] = 0;
                 }
-
-                // Update the state
-                this.controllers[gp.index] = gp;
 
                 // Check Activity to switch active controller
                 // Ignore axes at -1 (often resting triggers) to prevent false switching
